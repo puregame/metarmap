@@ -1,0 +1,7 @@
+astral
+requests
+pillow
+RPi.GPIO
+rpi_ws281x
+adafruit-circuitpython-neopixel
+adafruit-blinka
