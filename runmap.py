@@ -87,7 +87,7 @@ args = parser.parse_args()
 SIMULATION = args.dry_run or not HARDWARE_AVAILABLE
 
 # ───────────────────── LED Config ───────────────────────────────────────────────
-LED_COUNT = 30
+LED_COUNT = 100
 LED_PIN = 18
 LED_FREQ_HZ = 800_000
 LED_DMA = 10
@@ -95,23 +95,24 @@ LED_BRIGHTNESS = 65
 LED_INVERT = False
 LED_CHANNEL = 0
 
-AIRPORT_FILE = Path(__file__).with_name("airports.json")
+AIRPORT_FILE = Path(__file__).with_name("config.json")
 LOG_FILE = Path(__file__).with_name("metar_led.log")
 UPDATE_INTERVAL = 60 # refresh data every 60 seconds
 
-COLOR_MAP: Dict[str, Color] = { #NOTE: colors are in GRB format!!
-    "VFR": Color(140, 0, 0),
+
+COLOR_MAP: Dict[str, Color] = { #NOTE: colors are in RGB  format!!
+    "VFR": Color(0, 140, 0),
     "MVFR": Color(0, 0, 140),
-    "IFR": Color(0, 140, 0),
-    "LIFR": Color(0, 120, 80),
+    "IFR": Color(140, 0, 0),
+    "LIFR": Color(120, 0, 80),
     "UNK": Color(100, 100, 100),
 }
 
 COLOR_MAP_DIM: Dict[str, Color] = {
-    "VFR": Color(45, 0, 0),
+    "VFR": Color(0, 45, 0),
     "MVFR": Color(0, 0, 45),
-    "IFR": Color(0, 45, 0),
-    "LIFR": Color(0, 64, 64),
+    "IFR": Color(45, 0, 0),
+    "LIFR": Color(64, 0, 64),
     "UNK": Color(50, 50, 50),
 }
 
@@ -126,7 +127,7 @@ font_large = ImageFont.load_default(size=16)
 
 # ───────────────────── Logger ───────────────────────────────────────────────
 logger = logging.getLogger("metar_led")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 for h in (logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)):
     h.setFormatter(fmt)
@@ -143,11 +144,27 @@ status_display = {'ip_address': 'Disconnected',
 
 # ───────────────────── Helpers ──────────────────────────────────────────────
 
-def load_airports() -> Tuple[List[str], str]:
+def load_config() -> Tuple[List[str], str]:
     try:
         data = json.loads(AIRPORT_FILE.read_text())
         airports = data.get("airports", [])
         home = data.get('home', '')
+        if data.get("num_leds"):
+            # if led_count exists in config, use it 
+            global LED_COUNT
+            LED_COUNT = data["num_leds"]
+        if data.get("colors"):
+            # if colors exists in config, use them 
+            global COLOR_MAP
+            logger.debug(f"old colors: {COLOR_MAP}")
+            COLOR_MAP = {k: Color(*v) for k, v in data["colors"].items()}
+            logger.debug(f"Loading colors from config: {COLOR_MAP}")
+        if data.get("dim_colors"):
+            # if dim_colors exists in config, use them 
+            global COLOR_MAP_DIM
+            logger.debug(f"old dim colors: {COLOR_MAP_DIM}")
+            COLOR_MAP_DIM = {k: Color(*v) for k, v in data["dim_colors"].items()}
+            logger.debug(f"Loading dim colors from config: {COLOR_MAP_DIM}")
         if not airports:
             raise ValueError("No airports in JSON")
         return airports, home
@@ -375,6 +392,8 @@ def wait_for_wifi(oled):
 # ───────────────────── Main ────────────────────────────────────────────────
 
 def main():
+    airports, home = load_config()
+
     # Setup LED Strip and OLED Display
     strip = PixelStrip(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
     strip.begin()
@@ -413,8 +432,6 @@ def main():
         status_test['ip_address'], status_test['rssi'] = get_wifi_status()
         display_update(oled, status_test)
         return
-
-    airports, home = load_airports()
 
     if args.cycle_airports:
         while True:

@@ -1,0 +1,20 @@
+{
+  "serial_number": "SN:XXXX",
+  "num_leds": 100,
+  "airports": ["CYYZ", "CYTZ", "CYOW", "CYAM", "CYSB", "CYTS", "CYYB", "CYXR", "CYZE"],
+  "home": "CYYZ",
+  "colors": {
+    "VFR": [0, 140, 0],
+    "MVFR": [0, 0, 140],
+    "IFR": [140, 0, 0],
+    "LIFR": [120, 0, 80],
+    "UNK": [100, 100, 100]
+  },
+  "dim_colors": {
+    "VFR": [0, 45, 0],
+    "MVFR": [0, 0, 45],
+    "IFR": [45, 0, 0],
+    "LIFR": [64, 0, 64],
+    "UNK": [50, 50, 50]
+  }
+}
