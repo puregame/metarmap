@@ -183,11 +183,11 @@ def ceiling_category(clouds: List[dict]) -> str:
             ceiling = base if ceiling is None or base < ceiling else ceiling
     if ceiling is None:
         return "VFR"
-    if ceiling < 500:
+    if ceiling <= 500:
         return "LIFR"
-    if ceiling < 1000:
+    if ceiling <= 1000:
         return "IFR"
-    if ceiling < 3000:
+    if ceiling <= 3000:
         return "MVFR"
     return "VFR"
 
