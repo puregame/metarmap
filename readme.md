@@ -167,11 +167,14 @@ To update the code from the GitHub repository:
 
 ```bash
 sudo su
-sudo systemctl stop metarmap.service
+systemctl stop metarmap.service
 cd /root/metarmap
+git update-index --assume-unchanged config.json
 git pull
-sudo systemctl start metarmap.service
+systemctl start metarmap.service
 ```
+
+NOTE: Ensure you `--assume-unchanged` the config.json file otherwise your settings WILL be overwritten!
 
 ---
 
