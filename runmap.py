@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from functools import partial
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import requests
 
@@ -140,7 +140,8 @@ logger.info("Simulation mode: %s", SIMULATION)
 status_display = {'ip_address': 'Disconnected',
                   'rssi': 'None',
                   'time': datetime.now(),
-                  'last_metar': 'ERROR'}
+                  'last_metar': 'ERROR',
+                  'other_text': None}  # for display on OLED
 
 # ───────────────────── Helpers ──────────────────────────────────────────────
 
@@ -274,7 +275,13 @@ def led_set_single(strip: PixelStrip, number: int, color:Color):
     strip.show()
 
 
-def display_update(oled: adafruit_ssd1306.SSD1306_I2C, display_data: dict):
+def led_set_all(strip: PixelStrip, color: Color):
+    for i in range(strip.numPixels()):
+        strip.setPixelColor(i, color)
+    strip.show()
+
+
+def update_display_normal(oled: adafruit_ssd1306.SSD1306_I2C, display_data: dict):
     image = Image.new("1", (oled.width, oled.height))
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
@@ -326,7 +333,11 @@ def display_update(oled: adafruit_ssd1306.SSD1306_I2C, display_data: dict):
     wifi_text = f"{display_data['ip_address']}"
 
     # Draw WX time top left-justified
-    draw.text((0, 0), wx_text, font=font_large, fill=255)
+    if display_data['other_text']:
+        draw.text((0, 0), display_data['other_text'], font=font_large, fill=255)
+    else:
+        draw.text((0, 0), wx_text, font=font_large, fill=255)
+
     # Draw NOW time bottom left-justified
     draw.text((0, 16), now_text, font=font_large, fill=255)
 
@@ -358,6 +369,7 @@ def cleanup(oled, strip, signum, frame):
 
 def home_airport_get_sun(airport:str) -> LocationInfo:
     airport_data = get_metar_json([airport])[0]
+    print(airport_data)
     # Create Astral Location
     return LocationInfo(name=airport, region="Airport", timezone="UTC", latitude=airport_data['lat'], longitude=airport_data['lon']) 
 
@@ -368,7 +380,15 @@ def get_is_night(location: LocationInfo) -> bool:
     logger.debug(f"home dawn: {sun_times['dawn']}")
     logger.debug(f"home dusk: {sun_times['dusk']}")
     logger.debug(f"now: {now}")
-    return now < sun_times["dawn"] or now > sun_times["dusk"]
+#    return now < sun_times["dawn"] or now > sun_times["dusk"]
+    # Handle edge case: dusk is technically on the next day
+    if sun_times['dusk'] < sun_times["dawn"]:
+        # in this case, night must be both after dusk and before dawn
+        return now < sun_times['dawn'] and now > sun_times['dusk']
+    else:
+        # Normal day: night is before dawn or after dusk
+        # in this case night is before dawn or after dusk
+        return now < sun_times["dawn"] or now > sun_times['dusk']
 
 
 def is_wifi_connected():
@@ -426,11 +446,12 @@ def main():
         status_test = {'ip_address': 'N/A',
                        'rssi': None,
                        'time': datetime.now(),
-                       'last_metar': None}
+                       'last_metar': None,
+                       'other_text': None}
         
         status_test['time'] = datetime.now()
         status_test['ip_address'], status_test['rssi'] = get_wifi_status()
-        display_update(oled, status_test)
+        update_display_normal(oled, status_test)
         return
 
     if args.cycle_airports:
@@ -458,7 +479,18 @@ def main():
                 metars = get_metar_json(airports)
                 tries = tries + 1
                 if tries > 5:
-                    raise Exception("Can't get METAR List")
+                    
+                    if status_display['last_metar'] > datetime.now(timezone.utc) - timedelta(minutes=60):
+                        # if no metar recieved in 60 minutes, set all LEDs to unknown color, log a warning, and set the display to "NO CONNECTION"
+                        logger.error("No METARs received after 60 minutes, waiting for next update interval.")
+                        led_set_all(strip, category_to_color('UNK')) # category_to_color will return the unknown color with day/night mode
+                        status_display['other_text'] = "API ERROR"
+                        update_display_normal(oled, status_display)
+
+                    # if too many tries, wait for update interval and try again.
+                    time.sleep(UPDATE_INTERVAL)
+                    status_display['other_text'] = None # clear other text and hope we get a metar next time
+                    continue
 
             with open('latest_metars.json', "w") as f:
                 json.dump(metars, f, indent=4)
@@ -470,7 +502,7 @@ def main():
 
             status_display['time'] = datetime.now()
             status_display['ip_address'], status_display['rssi'] = get_wifi_status()
-            display_update(oled, status_display)
+            update_display_normal(oled, status_display)
             time.sleep(UPDATE_INTERVAL)
     except KeyboardInterrupt:
         logger.info("Shutting down, clearing LEDs and display…")

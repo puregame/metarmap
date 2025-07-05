@@ -77,7 +77,7 @@ Ensure the Pi is connected to Wi-Fi. `nmcli` is recommended over `wpa_supplicant
 Install required packages:
 ```bash
 sudo apt update
-sudo apt install git python3-pip
+sudo apt install git python3-pip libjpeg-dev zlib1g-dev libfreetype6-dev
 ```
 
 ### 2. Clone the Rpository
@@ -87,7 +87,19 @@ cd /root
 git clone https://github.com/puregame/metarmap.git
 ```
 
-### 3. Set Up Python Virtual Environment
+### 3. Enable I2C Interface
+```bash
+raspi-config
+```
+Browse to Interfacing Options > I2C > Enable
+
+Optional: check I2C connection
+```bash
+sudo apt install -y i2c-tools
+i2cdetect -y 1
+```
+
+### 4. Set Up Python Virtual Environment
 Create and activate a virtual environment:
 
 ```bash
@@ -95,7 +107,7 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-### 4. Install Python Dependencies
+### 5. Install Python Dependencies
 Navigate to the project folder and install required packages:
 
 ```bash
@@ -103,7 +115,7 @@ cd metarmap
 pip install -r requirements.txt
 ```
 
-### 5. Configure the Systemd Service
+### 6. Configure the Systemd Service
 Copy the included service file:
 
 ```bash
@@ -118,7 +130,7 @@ systemctl daemon-reload
 systemctl enable metarmap.service
 ```
 
-### 6. Start and Check the Service
+### 7. Start and Check the Service
 Start the service and view its status:
 
 ```bash
