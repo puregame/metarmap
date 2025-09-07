@@ -495,7 +495,11 @@ def main():
             with open('latest_metars.json', "w") as f:
                 json.dump(metars, f, indent=4)
 
-            status_display['last_metar'] = datetime.strptime(metars[0]['reportTime'], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            # Parse ISO 8601 format with Zulu time
+            report_time_str = metars[0]['reportTime']
+            if report_time_str.endswith('Z'):
+                report_time_str = report_time_str[:-1]  # Remove 'Z'
+            status_display['last_metar'] = datetime.fromisoformat(report_time_str).replace(tzinfo=timezone.utc)
 
             cats = parse_metar_statuses(metars, airports)
             led_update(strip, airports, cats, night=get_is_night(home_location))
