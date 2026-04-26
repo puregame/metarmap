@@ -70,6 +70,7 @@ BUTTON_PIN = 23
 
 LOG_FILE = Path(__file__).with_name("metar_led.log")
 UPDATE_INTERVAL = 60  # seconds between METAR refreshes
+DISPLAY_INTERVAL = 1  # seconds between OLED display updates
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logger = logging.getLogger("metar_led")
@@ -165,43 +166,19 @@ def main() -> None:
     state.home_location = home_location
 
     state.status_display["hostname"] = get_hostname()
+    state.status_display["timezone"] = tz_str
     show_status = False
+    last_metar_fetch = 0.0
 
     try:
         while True:
-            if state.strip_needs_reinit:
-                logger.info("Reinitializing LED strip with %d pixels", state.LED_COUNT)
-                led_clear(strip)
-                strip = PixelStrip(
-                    state.LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
-                )
-                strip.begin()
-                state.strip = strip
-                state.strip_needs_reinit = False
-                logger.info("LED strip reinitialized")
+            now = time.time()
+            display_now = datetime.now()
 
-            airports = state.current_airports  # picks up any saves from the web UI
-            night = get_is_night(home_location)
-            state.is_night = night  # update regardless of METAR fetch success
-            logger.info("Night Mode: %s", night)
-            metars = _fetch_metars_with_retry(airports, strip, oled)
-            if metars is None:
-                continue
-
-            with open("latest_metars.json", "w") as f:
-                json.dump(metars, f, indent=4)
-
-            _update_report_time(metars)
-            _update_home_metar(metars, home)
-
-            cats = parse_metar_statuses(metars, airports)
-            led_update(strip, airports, cats, night=night)
-
-            state.categories = cats
-            state.status_display["time"] = datetime.now()
+            # ── Display update (every 1 second) ────────────────────────────
+            state.status_display["time"] = display_now
+            state.status_display["cycle_time"] = now
             state.status_display["ip_address"], state.status_display["rssi"] = get_wifi_status()
-            state.status_display["cycle_time"] = time.time()
-            state.status_display["timezone"] = tz_str
 
             # Check button: if held, toggle screen and wait for release
             if _gpio_available:
@@ -221,7 +198,41 @@ def main() -> None:
             else:
                 update_display_normal(oled, state.status_display)
 
-            state.refresh_event.wait(timeout=UPDATE_INTERVAL)
+            # ── METAR fetch + LED update (every 60 seconds) ────────────────
+            if now - last_metar_fetch >= UPDATE_INTERVAL:
+                last_metar_fetch = now
+
+                if state.strip_needs_reinit:
+                    logger.info("Reinitializing LED strip with %d pixels", state.LED_COUNT)
+                    led_clear(strip)
+                    strip = PixelStrip(
+                        state.LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
+                    )
+                    strip.begin()
+                    state.strip = strip
+                    state.strip_needs_reinit = False
+                    logger.info("LED strip reinitialized")
+
+                airports = state.current_airports  # picks up any saves from the web UI
+                night = get_is_night(home_location)
+                state.is_night = night  # update regardless of METAR fetch success
+                logger.info("Night Mode: %s", night)
+                metars = _fetch_metars_with_retry(airports, strip, oled)
+                if metars is None:
+                    continue
+
+                with open("latest_metars.json", "w") as f:
+                    json.dump(metars, f, indent=4)
+
+                _update_report_time(metars)
+                _update_home_metar(metars, home)
+
+                cats = parse_metar_statuses(metars, airports)
+                led_update(strip, airports, cats, night=night)
+
+                state.categories = cats
+
+            state.refresh_event.wait(timeout=DISPLAY_INTERVAL)
             state.refresh_event.clear()
 
     except KeyboardInterrupt:

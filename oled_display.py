@@ -155,7 +155,7 @@ def update_display_normal(oled, display_data: dict) -> None:
     now_text = now_local.strftime("%H:%M") if now_local else "N/A"
 
     cycle_time = display_data.get("cycle_time", 0)
-    cycle_index = int(time.time()) % 20 // 5 if cycle_time else 0
+    cycle_index = int(cycle_time) // 5 % 4 if cycle_time else 0
 
     if display_data.get("other_text"):
         top_text = display_data["other_text"]
