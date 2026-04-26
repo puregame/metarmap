@@ -147,6 +147,18 @@ class TestLoadTemplate(unittest.TestCase):
     def test_has_color_pickers(self):
         self.assertIn("color-grid-day", load_template())
 
+    def test_has_log_tab(self):
+        self.assertIn("tab-log", load_template())
+
+    def test_log_fetches_500_lines(self):
+        self.assertIn("lines=500", load_template())
+
+    def test_test_on_leds_endpoint(self):
+        self.assertIn("/api/leds/test", load_template())
+
+    def test_test_button_has_tooltip(self):
+        self.assertIn("title=", load_template())
+
 
 # ── Get config ───────────────────────────────────────────────────────────────
 

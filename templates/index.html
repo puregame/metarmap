@@ -20,7 +20,7 @@ h3 { color: #8b949e; font-size: 0.82em; letter-spacing: 0.5px; text-transform: u
 .tab { display: none; }
 .tab.active { display: block; }
 
-/* Status */
+/* Cards */
 .card { background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 16px; margin-bottom: 14px; }
 .card:last-child { margin-bottom: 0; }
 .status-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #21262d; }
@@ -31,13 +31,13 @@ h3 { color: #8b949e; font-size: 0.82em; letter-spacing: 0.5px; text-transform: u
 /* Airport grid */
 .airport-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
 .airport-cell { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 6px 8px; display: flex; align-items: center; gap: 6px; }
-.airport-cell .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #30363d; }
+.airport-cell .dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; background: #30363d; }
 .airport-cell .code { font-size: 0.88em; color: #e0e0e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .airport-cell .cat { font-size: 0.72em; color: #6e7681; margin-left: auto; flex-shrink: 0; }
 
 /* Night mode badge */
 .badge { border-radius: 3px; display: inline-block; font-size: 0.75em; padding: 2px 6px; }
-.badge-day  { background: #1d3a1d; color: #3fb950; }
+.badge-day   { background: #1d3a1d; color: #3fb950; }
 .badge-night { background: #1a1a3a; color: #79c0ff; }
 
 /* Settings grid */
@@ -50,11 +50,13 @@ input[type=number].text-input { width: 120px; }
 select.text-input { cursor: pointer; }
 select.text-input option, select.text-input optgroup { background: #161b22; }
 
-/* Color pickers grid */
-.color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-.color-row { display: flex; align-items: center; gap: 8px; }
-.color-row label { color: #8b949e; font-size: 0.88em; flex: 1; }
-.color-row input[type=color] { border: 1px solid #30363d; border-radius: 3px; cursor: pointer; height: 28px; padding: 1px 2px; width: 48px; background: #0d1117; }
+/* Color pickers — side-by-side day / night columns */
+.color-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.color-col h3 { margin-bottom: 10px; }
+.color-list { display: flex; flex-direction: column; gap: 7px; }
+.color-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.color-item label { color: #8b949e; font-size: 0.9em; flex: 1; }
+.color-item input[type=color] { background: #0d1117; border: 1px solid #30363d; border-radius: 3px; cursor: pointer; height: 26px; padding: 1px 2px; width: 44px; flex-shrink: 0; }
 
 /* Toolbar */
 .toolbar { display: flex; gap: 10px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
@@ -89,7 +91,8 @@ tbody tr:hover { background: #161b22; }
 .airport-input.none-val { color: #6e7681; }
 
 /* Log */
-.log-box { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; color: #6e7681; font-size: 0.78em; max-height: 180px; overflow-y: auto; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; }
+.log-box { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; color: #6e7681; font-size: 0.78em; height: 70vh; overflow-y: auto; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; }
+.log-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -98,6 +101,7 @@ tbody tr:hover { background: #161b22; }
 <nav class="nav">
   <button class="active" onclick="showTab('home',this)">Home</button>
   <button onclick="showTab('config',this)">Config</button>
+  <button onclick="showTab('log',this)">Log</button>
 </nav>
 
 <!-- ── Home tab ── -->
@@ -111,11 +115,6 @@ tbody tr:hover { background: #161b22; }
       <button class="btn btn-refresh" id="btn-refresh" onclick="doRefresh(this)">↻ Refresh Now</button>
     </div>
     <div class="airport-grid" id="airport-grid"></div>
-  </div>
-
-  <div class="card">
-    <h3>Recent Log</h3>
-    <div class="log-box" id="log-box">Loading…</div>
   </div>
 
 </div>
@@ -174,21 +173,20 @@ tbody tr:hover { background: #161b22; }
 
   <!-- Color configuration -->
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-      <div>
-        <h3 style="margin-bottom:2px">LED Colors — Day</h3>
-        <span style="color:#484f58;font-size:0.78em">LEDs 0–4 when testing</span>
+    <div class="color-section">
+      <div class="color-col">
+        <h3>LED Colors — Day</h3>
+        <div class="color-list" id="color-grid-day"></div>
+      </div>
+      <div class="color-col">
+        <h3>LED Colors — Night</h3>
+        <div class="color-list" id="color-grid-night"></div>
       </div>
     </div>
-    <div class="color-grid" id="color-grid-day"></div>
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:14px;margin-bottom:2px">
-      <div>
-        <h3 style="margin-bottom:2px">LED Colors — Night</h3>
-        <span style="color:#484f58;font-size:0.78em">LEDs 5–9 when testing</span>
-      </div>
-      <button class="btn btn-refresh" id="btn-test-colors" onclick="testColors(this)" style="align-self:center">Test on LEDs</button>
+    <div style="margin-top:14px">
+      <button class="btn btn-refresh" id="btn-test-colors" onclick="testColors(this)"
+              title="Sets LEDs 0–4 to the five day colors and LEDs 5–9 to the five night colors (VFR → MVFR → IFR → LIFR → UNK). Saves your current picker values first.">Test on LEDs</button>
     </div>
-    <div class="color-grid" id="color-grid-night"></div>
   </div>
 
   <!-- Toolbar -->
@@ -210,18 +208,30 @@ tbody tr:hover { background: #161b22; }
 
 </div>
 
+<!-- ── Log tab ── -->
+<div id="tab-log" class="tab">
+  <div class="card">
+    <div class="log-toolbar">
+      <button class="btn btn-refresh" onclick="refreshLogs(true)">↻ Reload</button>
+    </div>
+    <div class="log-box" id="log-box">Loading…</div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
 var _configLoaded = false;
-var _lastStatus = null;
+var _logLoaded    = false;
+var _lastStatus   = null;
 
-var CAT_COLORS = {
-  VFR:  '#00cc00',
-  MVFR: '#0000cc',
-  IFR:  '#cc0000',
-  LIFR: '#880055',
-  UNK:  '#888888',
+/* Bright web-display colors — separate from dim hardware LED values */
+var WEB_CAT_COLORS = {
+  VFR:  '#00e64d',
+  MVFR: '#4d9fff',
+  IFR:  '#ff4444',
+  LIFR: '#dd44cc',
+  UNK:  '#aaaaaa',
 };
 
 var TZ_LABELS = {
@@ -258,6 +268,7 @@ function showTab(name, btn) {
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
   if (name === 'config' && !_configLoaded) loadConfig();
+  if (name === 'log'    && !_logLoaded)    refreshLogs(true);
 }
 
 /* ── Home: status ── */
@@ -296,10 +307,6 @@ function renderStatus(d) {
 function renderAirportGrid(d) {
   var airports = d.airports || [];
   var cats = d.categories || {};
-  var colors = d.category_colors || CAT_COLORS;
-  var isNight = d.is_night;
-  var dimColors = d.category_colors_dim || {};
-
   var nonNone = airports.filter(function(a) { return a && a !== 'NONE'; });
   var card = document.getElementById('airports-card');
   if (nonNone.length === 0) { card.style.display = 'none'; return; }
@@ -308,8 +315,7 @@ function renderAirportGrid(d) {
   var html = '';
   nonNone.forEach(function(code) {
     var cat = cats[code] || 'UNK';
-    var colorMap = isNight ? dimColors : colors;
-    var dotColor = colorMap[cat] || CAT_COLORS[cat] || '#888';
+    var dotColor = WEB_CAT_COLORS[cat] || '#aaaaaa';
     html += '<div class="airport-cell">'
           + '<span class="dot" style="background:' + dotColor + '"></span>'
           + '<span class="code">' + code + '</span>'
@@ -329,20 +335,6 @@ function timeSince(isoString) {
   return m + 'm ' + s + 's ago';
 }
 
-/* ── Home: logs ── */
-function refreshLogs() {
-  fetch('/api/logs')
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      var box = document.getElementById('log-box');
-      box.textContent = (d.lines || []).join('\n') || '(no log entries)';
-      box.scrollTop = box.scrollHeight;
-    })
-    .catch(function() {
-      document.getElementById('log-box').textContent = 'Error loading log.';
-    });
-}
-
 /* ── Home: force refresh ── */
 function doRefresh(btn) {
   btn.disabled = true;
@@ -351,7 +343,6 @@ function doRefresh(btn) {
     .then(function() {
       setTimeout(function() {
         refreshStatus();
-        refreshLogs();
         btn.textContent = '↻ Refresh Now';
         btn.disabled = false;
       }, 2000);
@@ -360,9 +351,22 @@ function doRefresh(btn) {
 }
 
 refreshStatus();
-refreshLogs();
 setInterval(refreshStatus, 60000);
-setInterval(refreshLogs, 60000);
+
+/* ── Log tab ── */
+function refreshLogs(scrollToBottom) {
+  fetch('/api/logs?lines=500')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var box = document.getElementById('log-box');
+      box.textContent = (d.lines || []).join('\n') || '(no log entries)';
+      if (scrollToBottom) box.scrollTop = box.scrollHeight;
+      _logLoaded = true;
+    })
+    .catch(function() {
+      document.getElementById('log-box').textContent = 'Error loading log.';
+    });
+}
 
 /* ── Config: load ── */
 function loadConfig() {
@@ -386,19 +390,19 @@ function buildColorPickers(colors, dimColors) {
     if (!Array.isArray(rgb)) return '#888888';
     return '#' + rgb.map(function(v) { return ('0' + v.toString(16)).slice(-2); }).join('');
   }
-  function makeGrid(gridId, colorMap, prefix) {
+  function makeList(listId, colorMap, prefix) {
     var html = '';
     CAT_ORDER.forEach(function(cat) {
-      var hex = colorMap && colorMap[cat] ? rgbToHex(colorMap[cat]) : CAT_COLORS[cat] || '#888888';
-      html += '<div class="color-row">'
+      var hex = colorMap && colorMap[cat] ? rgbToHex(colorMap[cat]) : WEB_CAT_COLORS[cat] || '#888888';
+      html += '<div class="color-item">'
             + '<label>' + cat + '</label>'
             + '<input type="color" id="' + prefix + '-' + cat + '" value="' + hex + '">'
             + '</div>';
     });
-    document.getElementById(gridId).innerHTML = html;
+    document.getElementById(listId).innerHTML = html;
   }
-  makeGrid('color-grid-day',   colors,    'col-day');
-  makeGrid('color-grid-night', dimColors, 'col-night');
+  makeList('color-grid-day',   colors,    'col-day');
+  makeList('color-grid-night', dimColors, 'col-night');
 }
 
 function collectColors(prefix) {
@@ -447,9 +451,7 @@ function testColors(btn) {
   btn.textContent = '…';
   fetch('/api/leds/test', {method: 'POST'})
     .then(function(r) { return r.json(); })
-    .then(function(d) {
-      btn.textContent = d.error ? 'Error' : 'Test on LEDs';
-    })
+    .then(function(d) { btn.textContent = d.error ? 'Error' : 'Test on LEDs'; })
     .catch(function() { btn.textContent = 'Test on LEDs'; })
     .finally(function() { btn.disabled = false; });
 }
@@ -489,7 +491,7 @@ function saveConfig(btn) {
       showMsg('ok', 'Saved.');
       _configLoaded = false;
       loadConfig();
-      refreshStatus();  // update home tab airport colors immediately
+      refreshStatus();
     } else {
       showMsg('err', d.error || 'Save failed.');
     }

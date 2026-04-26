@@ -221,8 +221,11 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_json(get_status_json())
         elif self.path == "/api/config":
             self.send_json(handle_get_config())
-        elif self.path == "/api/logs":
-            self.send_json(handle_get_logs())
+        elif self.path.startswith("/api/logs"):
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(self.path).query)
+            lines = int(qs.get("lines", ["100"])[0])
+            self.send_json(handle_get_logs(lines))
         else:
             self.send_error(404)
 
