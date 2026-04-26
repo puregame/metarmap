@@ -8,6 +8,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: monospace; background: #0d1117; color: #e0e0e0; padding: 20px; max-width: 860px; margin: 0 auto; }
 h1 { text-align: center; color: #00ff88; margin-bottom: 20px; font-size: 1.4em; letter-spacing: 1px; }
+h3 { color: #8b949e; font-size: 0.82em; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 10px; }
 
 /* Nav */
 .nav { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 24px; }
@@ -20,14 +21,27 @@ h1 { text-align: center; color: #00ff88; margin-bottom: 20px; font-size: 1.4em; 
 .tab.active { display: block; }
 
 /* Status */
-.card { background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 16px; }
+.card { background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 16px; margin-bottom: 14px; }
+.card:last-child { margin-bottom: 0; }
 .status-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #21262d; }
 .status-row:last-child { border-bottom: none; }
 .status-label { color: #8b949e; }
 .status-value { color: #00ff88; }
 
+/* Airport grid */
+.airport-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.airport-cell { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 6px 8px; display: flex; align-items: center; gap: 6px; }
+.airport-cell .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #30363d; }
+.airport-cell .code { font-size: 0.88em; color: #e0e0e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.airport-cell .cat { font-size: 0.72em; color: #6e7681; margin-left: auto; flex-shrink: 0; }
+
+/* Night mode badge */
+.badge { border-radius: 3px; display: inline-block; font-size: 0.75em; padding: 2px 6px; }
+.badge-day  { background: #1d3a1d; color: #3fb950; }
+.badge-night { background: #1a1a3a; color: #79c0ff; }
+
 /* Settings grid */
-.settings-grid { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; align-items: center; margin-bottom: 0; }
+.settings-grid { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; align-items: center; }
 .settings-grid label { color: #8b949e; font-size: 0.9em; white-space: nowrap; }
 .settings-grid .hint { color: #484f58; font-size: 0.78em; grid-column: 2; margin-top: -6px; }
 .text-input { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e0e0e0; font-family: monospace; font-size: 0.95em; padding: 5px 8px; width: 100%; }
@@ -36,18 +50,26 @@ input[type=number].text-input { width: 120px; }
 select.text-input { cursor: pointer; }
 select.text-input option, select.text-input optgroup { background: #161b22; }
 
+/* Color pickers grid */
+.color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.color-row { display: flex; align-items: center; gap: 8px; }
+.color-row label { color: #8b949e; font-size: 0.88em; flex: 1; }
+.color-row input[type=color] { border: 1px solid #30363d; border-radius: 3px; cursor: pointer; height: 28px; padding: 1px 2px; width: 48px; background: #0d1117; }
+
 /* Toolbar */
 .toolbar { display: flex; gap: 10px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
 
 /* Buttons */
 .btn { border: none; border-radius: 5px; cursor: pointer; font-family: monospace; font-size: 0.9em; padding: 8px 16px; transition: opacity 0.15s; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-save   { background: #238636; color: #fff; }
-.btn-save:not(:disabled):hover   { background: #2ea043; }
-.btn-danger { background: #b91c1c; color: #fff; }
-.btn-danger:not(:disabled):hover { background: #dc2626; }
-.btn-flash  { background: #1d4ed8; color: #fff; font-size: 0.82em; padding: 4px 10px; min-width: 58px; }
-.btn-flash:not(:disabled):hover  { background: #2563eb; }
+.btn-save    { background: #238636; color: #fff; }
+.btn-save:not(:disabled):hover    { background: #2ea043; }
+.btn-danger  { background: #b91c1c; color: #fff; }
+.btn-danger:not(:disabled):hover  { background: #dc2626; }
+.btn-flash   { background: #1d4ed8; color: #fff; font-size: 0.82em; padding: 4px 10px; min-width: 58px; }
+.btn-flash:not(:disabled):hover   { background: #2563eb; }
+.btn-refresh { background: #0e4429; border: 1px solid #238636; color: #3fb950; }
+.btn-refresh:not(:disabled):hover { background: #0a3320; }
 
 /* Message banner */
 .msg { border-radius: 5px; font-size: 0.88em; margin-bottom: 12px; padding: 8px 12px; }
@@ -65,6 +87,9 @@ tbody tr:hover { background: #161b22; }
 .airport-input { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e0e0e0; font-family: monospace; font-size: 0.95em; padding: 4px 8px; text-transform: uppercase; width: 84px; }
 .airport-input:focus { border-color: #58a6ff; outline: none; }
 .airport-input.none-val { color: #6e7681; }
+
+/* Log */
+.log-box { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; color: #6e7681; font-size: 0.78em; max-height: 180px; overflow-y: auto; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -77,14 +102,29 @@ tbody tr:hover { background: #161b22; }
 
 <!-- ── Home tab ── -->
 <div id="tab-home" class="tab active">
-  <div class="card" id="status"><p style="color:#6e7681">Loading…</p></div>
+
+  <div class="card" id="status-card"><p style="color:#6e7681">Loading…</p></div>
+
+  <div class="card" id="airports-card" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin-bottom:0">Airport Conditions</h3>
+      <button class="btn btn-refresh" id="btn-refresh" onclick="doRefresh(this)">↻ Refresh Now</button>
+    </div>
+    <div class="airport-grid" id="airport-grid"></div>
+  </div>
+
+  <div class="card">
+    <h3>Recent Log</h3>
+    <div class="log-box" id="log-box">Loading…</div>
+  </div>
+
 </div>
 
 <!-- ── Config tab ── -->
 <div id="tab-config" class="tab">
 
   <!-- Settings panel -->
-  <div class="card" style="margin-bottom:14px">
+  <div class="card">
     <div class="settings-grid">
       <label>Home Airport</label>
       <input id="cfg-home" class="text-input airport-input" maxlength="4" spellcheck="false"
@@ -132,6 +172,25 @@ tbody tr:hover { background: #161b22; }
     </div>
   </div>
 
+  <!-- Color configuration -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div>
+        <h3 style="margin-bottom:2px">LED Colors — Day</h3>
+        <span style="color:#484f58;font-size:0.78em">LEDs 0–4 when testing</span>
+      </div>
+    </div>
+    <div class="color-grid" id="color-grid-day"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:14px;margin-bottom:2px">
+      <div>
+        <h3 style="margin-bottom:2px">LED Colors — Night</h3>
+        <span style="color:#484f58;font-size:0.78em">LEDs 5–9 when testing</span>
+      </div>
+      <button class="btn btn-refresh" id="btn-test-colors" onclick="testColors(this)" style="align-self:center">Test on LEDs</button>
+    </div>
+    <div class="color-grid" id="color-grid-night"></div>
+  </div>
+
   <!-- Toolbar -->
   <div class="toolbar">
     <button class="btn btn-danger" onclick="clearLEDs(this)">Clear LEDs</button>
@@ -155,32 +214,41 @@ tbody tr:hover { background: #161b22; }
 'use strict';
 
 var _configLoaded = false;
+var _lastStatus = null;
+
+var CAT_COLORS = {
+  VFR:  '#00cc00',
+  MVFR: '#0000cc',
+  IFR:  '#cc0000',
+  LIFR: '#880055',
+  UNK:  '#888888',
+};
 
 var TZ_LABELS = {
-  'America/St_Johns':   'Newfoundland (NST/NDT)',
-  'America/Halifax':    'Atlantic (AST/ADT)',
-  'America/Toronto':    'Eastern (EST/EDT)',
-  'America/New_York':   'Eastern (EST/EDT)',
-  'America/Chicago':    'Central (CST/CDT)',
-  'America/Denver':     'Mountain (MST/MDT)',
-  'America/Phoenix':    'Arizona (MST, no DST)',
-  'America/Vancouver':  'Pacific (PST/PDT)',
-  'America/Los_Angeles':'Pacific (PST/PDT)',
-  'America/Anchorage':  'Alaska (AKST/AKDT)',
-  'Pacific/Honolulu':   'Hawaii (HST)',
-  'Europe/London':      'London (GMT/BST)',
-  'Europe/Paris':       'Central Europe (CET/CEST)',
-  'Europe/Berlin':      'Central Europe (CET/CEST)',
-  'Europe/Helsinki':    'Eastern Europe (EET/EEST)',
-  'Europe/Moscow':      'Moscow (MSK)',
-  'Asia/Dubai':         'Gulf (GST)',
-  'Asia/Kolkata':       'India (IST)',
-  'Asia/Bangkok':       'Indochina (ICT)',
-  'Asia/Shanghai':      'China (CST)',
-  'Asia/Tokyo':         'Japan (JST)',
-  'Australia/Sydney':   'Sydney (AEST/AEDT)',
-  'Pacific/Auckland':   'New Zealand (NZST/NZDT)',
-  'UTC':                'UTC',
+  'America/St_Johns':    'Newfoundland (NST/NDT)',
+  'America/Halifax':     'Atlantic (AST/ADT)',
+  'America/Toronto':     'Eastern (EST/EDT)',
+  'America/New_York':    'Eastern (EST/EDT)',
+  'America/Chicago':     'Central (CST/CDT)',
+  'America/Denver':      'Mountain (MST/MDT)',
+  'America/Phoenix':     'Arizona (MST, no DST)',
+  'America/Vancouver':   'Pacific (PST/PDT)',
+  'America/Los_Angeles': 'Pacific (PST/PDT)',
+  'America/Anchorage':   'Alaska (AKST/AKDT)',
+  'Pacific/Honolulu':    'Hawaii (HST)',
+  'Europe/London':       'London (GMT/BST)',
+  'Europe/Paris':        'Central Europe (CET/CEST)',
+  'Europe/Berlin':       'Central Europe (CET/CEST)',
+  'Europe/Helsinki':     'Eastern Europe (EET/EEST)',
+  'Europe/Moscow':       'Moscow (MSK)',
+  'Asia/Dubai':          'Gulf (GST)',
+  'Asia/Kolkata':        'India (IST)',
+  'Asia/Bangkok':        'Indochina (ICT)',
+  'Asia/Shanghai':       'China (CST)',
+  'Asia/Tokyo':          'Japan (JST)',
+  'Australia/Sydney':    'Sydney (AEST/AEDT)',
+  'Pacific/Auckland':    'New Zealand (NZST/NZDT)',
+  'UTC':                 'UTC',
 };
 
 /* ── Tab switching ── */
@@ -196,9 +264,13 @@ function showTab(name, btn) {
 function refreshStatus() {
   fetch('/api/status')
     .then(function(r) { return r.json(); })
-    .then(renderStatus)
+    .then(function(d) {
+      _lastStatus = d;
+      renderStatus(d);
+      renderAirportGrid(d);
+    })
     .catch(function() {
-      document.getElementById('status').innerHTML = '<p style="color:#f85149">Error loading status</p>';
+      document.getElementById('status-card').innerHTML = '<p style="color:#f85149">Error loading status</p>';
     });
 }
 
@@ -207,14 +279,44 @@ function renderStatus(d) {
     return '<div class="status-row"><span class="status-label">' + label + '</span>'
          + '<span class="status-value">' + val + '</span></div>';
   }
+  var modeLabel = d.is_night
+    ? '<span class="badge badge-night">Night</span>'
+    : '<span class="badge badge-day">Day</span>';
   var html = '';
   if (d.airports)   html += row('Airports',   d.airports.length + ' configured');
   if (d.home)       html += row('Home',       d.home);
   if (d.timezone)   html += row('Timezone',   TZ_LABELS[d.timezone] || d.timezone);
+  html += row('Mode', modeLabel);
   if (d.last_metar) html += row('Last METAR', timeSince(d.last_metar));
   if (d.ip_address) html += row('IP',         d.ip_address);
   if (d.led_count)  html += row('LEDs',       d.led_count);
-  document.getElementById('status').innerHTML = html || '<p style="color:#6e7681">No data</p>';
+  document.getElementById('status-card').innerHTML = html || '<p style="color:#6e7681">No data</p>';
+}
+
+function renderAirportGrid(d) {
+  var airports = d.airports || [];
+  var cats = d.categories || {};
+  var colors = d.category_colors || CAT_COLORS;
+  var isNight = d.is_night;
+  var dimColors = d.category_colors_dim || {};
+
+  var nonNone = airports.filter(function(a) { return a && a !== 'NONE'; });
+  var card = document.getElementById('airports-card');
+  if (nonNone.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  var html = '';
+  nonNone.forEach(function(code) {
+    var cat = cats[code] || 'UNK';
+    var colorMap = isNight ? dimColors : colors;
+    var dotColor = colorMap[cat] || CAT_COLORS[cat] || '#888';
+    html += '<div class="airport-cell">'
+          + '<span class="dot" style="background:' + dotColor + '"></span>'
+          + '<span class="code">' + code + '</span>'
+          + '<span class="cat">' + cat + '</span>'
+          + '</div>';
+  });
+  document.getElementById('airport-grid').innerHTML = html;
 }
 
 function timeSince(isoString) {
@@ -227,8 +329,40 @@ function timeSince(isoString) {
   return m + 'm ' + s + 's ago';
 }
 
+/* ── Home: logs ── */
+function refreshLogs() {
+  fetch('/api/logs')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var box = document.getElementById('log-box');
+      box.textContent = (d.lines || []).join('\n') || '(no log entries)';
+      box.scrollTop = box.scrollHeight;
+    })
+    .catch(function() {
+      document.getElementById('log-box').textContent = 'Error loading log.';
+    });
+}
+
+/* ── Home: force refresh ── */
+function doRefresh(btn) {
+  btn.disabled = true;
+  btn.textContent = '↻ Refreshing…';
+  fetch('/api/refresh', {method: 'POST'})
+    .then(function() {
+      setTimeout(function() {
+        refreshStatus();
+        refreshLogs();
+        btn.textContent = '↻ Refresh Now';
+        btn.disabled = false;
+      }, 2000);
+    })
+    .catch(function() { btn.textContent = '↻ Refresh Now'; btn.disabled = false; });
+}
+
 refreshStatus();
+refreshLogs();
 setInterval(refreshStatus, 60000);
+setInterval(refreshLogs, 60000);
 
 /* ── Config: load ── */
 function loadConfig() {
@@ -238,9 +372,42 @@ function loadConfig() {
       document.getElementById('cfg-home').value     = cfg.home     || '';
       document.getElementById('cfg-num-leds').value = cfg.num_leds || '';
       document.getElementById('cfg-timezone').value = cfg.timezone || '';
+      buildColorPickers(cfg.colors, cfg.dim_colors);
       buildTable(cfg.airports || [], cfg.num_leds || 100);
       _configLoaded = true;
     });
+}
+
+/* ── Config: color pickers ── */
+var CAT_ORDER = ['VFR', 'MVFR', 'IFR', 'LIFR', 'UNK'];
+
+function buildColorPickers(colors, dimColors) {
+  function rgbToHex(rgb) {
+    if (!Array.isArray(rgb)) return '#888888';
+    return '#' + rgb.map(function(v) { return ('0' + v.toString(16)).slice(-2); }).join('');
+  }
+  function makeGrid(gridId, colorMap, prefix) {
+    var html = '';
+    CAT_ORDER.forEach(function(cat) {
+      var hex = colorMap && colorMap[cat] ? rgbToHex(colorMap[cat]) : CAT_COLORS[cat] || '#888888';
+      html += '<div class="color-row">'
+            + '<label>' + cat + '</label>'
+            + '<input type="color" id="' + prefix + '-' + cat + '" value="' + hex + '">'
+            + '</div>';
+    });
+    document.getElementById(gridId).innerHTML = html;
+  }
+  makeGrid('color-grid-day',   colors,    'col-day');
+  makeGrid('color-grid-night', dimColors, 'col-night');
+}
+
+function collectColors(prefix) {
+  var result = {};
+  CAT_ORDER.forEach(function(cat) {
+    var el = document.getElementById(prefix + '-' + cat);
+    if (el) result[cat] = el.value;
+  });
+  return result;
 }
 
 /* ── Config: LED table ── */
@@ -275,6 +442,18 @@ function flashLED(index, btn) {
     .finally(function() { btn.textContent = 'Flash'; btn.disabled = false; });
 }
 
+function testColors(btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  fetch('/api/leds/test', {method: 'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.textContent = d.error ? 'Error' : 'Test on LEDs';
+    })
+    .catch(function() { btn.textContent = 'Test on LEDs'; })
+    .finally(function() { btn.disabled = false; });
+}
+
 function clearLEDs(btn) {
   btn.disabled = true;
   fetch('/api/leds/clear', {method: 'POST'})
@@ -290,10 +469,12 @@ function saveConfig(btn) {
   var numLedsRaw = parseInt(document.getElementById('cfg-num-leds').value, 10);
 
   var payload = {
-    airports: airports,
-    home:     document.getElementById('cfg-home').value.trim().toUpperCase(),
-    num_leds: isNaN(numLedsRaw) ? null : numLedsRaw,
-    timezone: document.getElementById('cfg-timezone').value.trim(),
+    airports:   airports,
+    home:       document.getElementById('cfg-home').value.trim().toUpperCase(),
+    num_leds:   isNaN(numLedsRaw) ? null : numLedsRaw,
+    timezone:   document.getElementById('cfg-timezone').value.trim(),
+    colors:     collectColors('col-day'),
+    dim_colors: collectColors('col-night'),
   };
 
   btn.disabled = true;
@@ -307,7 +488,8 @@ function saveConfig(btn) {
     if (d.ok) {
       showMsg('ok', 'Saved.');
       _configLoaded = false;
-      loadConfig();        // rebuild table in case num_leds changed
+      loadConfig();
+      refreshStatus();  // update home tab airport colors immediately
     } else {
       showMsg('err', d.error || 'Save failed.');
     }

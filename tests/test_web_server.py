@@ -10,11 +10,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import state
 from web_server import (
+    _rgb_to_hex,
     get_status_json,
     handle_clear_leds,
     handle_flash_led,
     handle_get_config,
+    handle_get_logs,
+    handle_refresh,
     handle_save_config,
+    handle_test_colors,
     load_template,
     start_web_server,
 )
@@ -31,9 +35,12 @@ class TestStatusJson(unittest.TestCase):
         state.status_display["last_metar"] = None
         state.status_display["ip_address"] = "192.168.1.100"
         state.LED_COUNT = 100
+        state.categories = {"CYYZ": "VFR", "CYTZ": "MVFR"}
+        state.is_night = False
 
     def test_keys_present(self):
-        for key in ("airports", "home", "timezone", "last_metar", "ip_address", "led_count"):
+        for key in ("airports", "home", "timezone", "last_metar", "ip_address", "led_count",
+                    "categories", "is_night", "category_colors", "category_colors_dim"):
             self.assertIn(key, get_status_json())
 
     def test_airports(self):
@@ -53,6 +60,48 @@ class TestStatusJson(unittest.TestCase):
         from datetime import datetime, timezone
         state.status_display["last_metar"] = datetime(2024, 4, 19, 14, 0, tzinfo=timezone.utc)
         self.assertIn("2024-04-19", get_status_json()["last_metar"])
+
+    def test_categories_included(self):
+        result = get_status_json()
+        self.assertEqual(result["categories"]["CYYZ"], "VFR")
+        self.assertEqual(result["categories"]["CYTZ"], "MVFR")
+
+    def test_is_night_false(self):
+        state.is_night = False
+        self.assertFalse(get_status_json()["is_night"])
+
+    def test_is_night_true(self):
+        state.is_night = True
+        self.assertTrue(get_status_json()["is_night"])
+        state.is_night = False
+
+    def test_category_colors_hex_format(self):
+        colors = get_status_json()["category_colors"]
+        for cat in ("VFR", "MVFR", "IFR", "LIFR", "UNK"):
+            self.assertIn(cat, colors)
+            self.assertRegex(colors[cat], r'^#[0-9a-f]{6}$')
+
+    def test_category_colors_dim_hex_format(self):
+        colors = get_status_json()["category_colors_dim"]
+        for cat in ("VFR", "MVFR", "IFR", "LIFR", "UNK"):
+            self.assertIn(cat, colors)
+            self.assertRegex(colors[cat], r'^#[0-9a-f]{6}$')
+
+
+# ── RGB to hex ────────────────────────────────────────────────────────────────
+
+class TestRgbToHex(unittest.TestCase):
+    def test_black(self):
+        self.assertEqual(_rgb_to_hex((0, 0, 0)), '#000000')
+
+    def test_white(self):
+        self.assertEqual(_rgb_to_hex((255, 255, 255)), '#ffffff')
+
+    def test_vfr_green(self):
+        self.assertEqual(_rgb_to_hex((0, 140, 0)), '#008c00')
+
+    def test_mixed(self):
+        self.assertEqual(_rgb_to_hex((16, 32, 255)), '#1020ff')
 
 
 # ── Template ──────────────────────────────────────────────────────────────────
@@ -85,6 +134,18 @@ class TestLoadTemplate(unittest.TestCase):
 
     def test_has_config_tab(self):
         self.assertIn("tab-config", load_template())
+
+    def test_api_refresh_endpoint(self):
+        self.assertIn("/api/refresh", load_template())
+
+    def test_api_logs_endpoint(self):
+        self.assertIn("/api/logs", load_template())
+
+    def test_has_airport_grid(self):
+        self.assertIn("airport-grid", load_template())
+
+    def test_has_color_pickers(self):
+        self.assertIn("color-grid-day", load_template())
 
 
 # ── Get config ───────────────────────────────────────────────────────────────
@@ -247,6 +308,123 @@ class TestHandleSaveConfig(unittest.TestCase):
         handle_save_config(body)
         written = json.loads(mock_path.write_text.call_args[0][0])
         self.assertEqual(written["num_leds"], 100)  # unchanged
+
+
+# ── Test colors ──────────────────────────────────────────────────────────────
+
+class TestHandleTestColors(unittest.TestCase):
+    def setUp(self):
+        self.mock_strip = MagicMock()
+        self.mock_strip.numPixels.return_value = 20
+        state.strip = self.mock_strip
+
+    def tearDown(self):
+        state.strip = None
+
+    def test_returns_ok(self):
+        result = handle_test_colors()
+        self.assertTrue(result.get("ok"))
+
+    def test_sets_10_leds(self):
+        handle_test_colors()
+        # 5 day + 5 night = 10 setPixelColor calls
+        self.assertEqual(self.mock_strip.setPixelColor.call_count, 10)
+
+    def test_calls_show(self):
+        handle_test_colors()
+        self.mock_strip.show.assert_called_once()
+
+    def test_no_strip_returns_error(self):
+        state.strip = None
+        result = handle_test_colors()
+        self.assertIn("error", result)
+
+
+# ── Refresh ───────────────────────────────────────────────────────────────────
+
+class TestHandleRefresh(unittest.TestCase):
+    def setUp(self):
+        state.refresh_event.clear()
+
+    def test_returns_ok(self):
+        result = handle_refresh()
+        self.assertTrue(result.get("ok"))
+
+    def test_sets_event(self):
+        handle_refresh()
+        self.assertTrue(state.refresh_event.is_set())
+
+    def tearDown(self):
+        state.refresh_event.clear()
+
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+
+class TestHandleGetLogs(unittest.TestCase):
+    @patch("web_server._LOG_FILE")
+    def test_returns_lines(self, mock_path):
+        mock_path.read_text.return_value = "line1\nline2\nline3\n"
+        result = handle_get_logs()
+        self.assertEqual(result["lines"], ["line1", "line2", "line3"])
+
+    @patch("web_server._LOG_FILE")
+    def test_returns_last_n_lines(self, mock_path):
+        mock_path.read_text.return_value = "\n".join(str(i) for i in range(200))
+        result = handle_get_logs(lines=100)
+        self.assertEqual(len(result["lines"]), 100)
+        self.assertEqual(result["lines"][-1], "199")
+
+    @patch("web_server._LOG_FILE")
+    def test_empty_lines_filtered(self, mock_path):
+        mock_path.read_text.return_value = "a\n\nb\n\n"
+        result = handle_get_logs()
+        self.assertEqual(result["lines"], ["a", "b"])
+
+    @patch("web_server._LOG_FILE")
+    def test_file_not_found_returns_empty(self, mock_path):
+        mock_path.read_text.side_effect = FileNotFoundError
+        result = handle_get_logs()
+        self.assertEqual(result["lines"], [])
+
+
+# ── Save config: colors ───────────────────────────────────────────────────────
+
+class TestHandleSaveConfigColors(unittest.TestCase):
+    @patch("web_server.AIRPORT_FILE")
+    def test_saves_colors(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ"]})
+        body = json.dumps({
+            "airports": ["CYYZ"],
+            "colors": {"VFR": "#00ff00", "MVFR": "#0000ff", "IFR": "#ff0000",
+                       "LIFR": "#880055", "UNK": "#888888"},
+        }).encode()
+        result = handle_save_config(body)
+        self.assertTrue(result.get("ok"))
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertEqual(written["colors"]["VFR"], [0, 255, 0])
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_updates_state_color_map(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ"]})
+        body = json.dumps({
+            "airports": ["CYYZ"],
+            "colors": {"VFR": "#001122", "MVFR": "#334455", "IFR": "#667788",
+                       "LIFR": "#99aabb", "UNK": "#ccddee"},
+        }).encode()
+        handle_save_config(body)
+        self.assertEqual(state.COLOR_MAP["VFR"], (0, 17, 34))
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_invalid_hex_ignored(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ"]})
+        body = json.dumps({
+            "airports": ["CYYZ"],
+            "colors": {"VFR": "notahex"},
+        }).encode()
+        result = handle_save_config(body)
+        self.assertTrue(result.get("ok"))
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertNotIn("colors", written)
 
 
 # ── Server startup ────────────────────────────────────────────────────────────

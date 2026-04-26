@@ -129,14 +129,18 @@ def main() -> None:
             _update_home_metar(metars, home)
 
             cats = parse_metar_statuses(metars, airports)
-            led_update(strip, airports, cats, night=get_is_night(home_location))
+            night = get_is_night(home_location)
+            led_update(strip, airports, cats, night=night)
 
+            state.categories = cats
+            state.is_night = night
             state.status_display["time"] = datetime.now()
             state.status_display["ip_address"], state.status_display["rssi"] = get_wifi_status()
             state.status_display["cycle_time"] = time.time()
             state.status_display["timezone"] = tz_str
             update_display_normal(oled, state.status_display)
-            time.sleep(UPDATE_INTERVAL)
+            state.refresh_event.wait(timeout=UPDATE_INTERVAL)
+            state.refresh_event.clear()
 
     except KeyboardInterrupt:
         logger.info("Shutting down")

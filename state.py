@@ -1,11 +1,15 @@
 """Shared mutable application state accessed by all modules."""
 
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 LED_COUNT: int = 100
 current_airports: List[str] = []
 strip: Any = None  # PixelStrip instance set by main() after hardware init
+categories: Dict[str, str] = {}  # airport -> VFR/MVFR/IFR/LIFR/UNK
+is_night: bool = False
+refresh_event: threading.Event = threading.Event()
 
 # Colors as (R, G, B) tuples; converted to Color objects by led_control
 COLOR_MAP: Dict[str, Tuple[int, int, int]] = {

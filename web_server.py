@@ -11,6 +11,8 @@ from pathlib import Path
 import state
 from config import AIRPORT_FILE, validate_config
 
+_LOG_FILE = Path(__file__).with_name("metar_led.log")
+
 logger = logging.getLogger("metar_led")
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
@@ -24,18 +26,26 @@ def load_template() -> str:
 
 # ── API handlers (pure functions, easy to unit-test) ─────────────────────────
 
+def _rgb_to_hex(rgb: tuple) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
 def get_status_json() -> dict:
     return {
-        "airports":   state.current_airports,
-        "home":       state.status_display.get("home_airport"),
-        "timezone":   state.status_display.get("timezone"),
-        "last_metar": (
+        "airports":        state.current_airports,
+        "home":            state.status_display.get("home_airport"),
+        "timezone":        state.status_display.get("timezone"),
+        "last_metar":      (
             state.status_display["last_metar"].isoformat()
             if state.status_display.get("last_metar")
             else None
         ),
-        "ip_address": state.status_display.get("ip_address"),
-        "led_count":  state.LED_COUNT,
+        "ip_address":      state.status_display.get("ip_address"),
+        "led_count":       state.LED_COUNT,
+        "categories":      dict(state.categories),
+        "is_night":        state.is_night,
+        "category_colors": {k: _rgb_to_hex(v) for k, v in state.COLOR_MAP.items()},
+        "category_colors_dim": {k: _rgb_to_hex(v) for k, v in state.COLOR_MAP_DIM.items()},
     }
 
 
@@ -71,6 +81,40 @@ def handle_flash_led(index: int) -> dict:
         led_set_single(state.strip, index, Color(0, 0, 0))
         time.sleep(0.15)
     return {"ok": True}
+
+
+def handle_test_colors() -> dict:
+    """Light a sequence of LEDs to demonstrate all day+night category colors."""
+    if state.strip is None:
+        return {"error": "LED strip not initialised"}
+    from hardware import Color
+    from led_control import led_clear
+    cats = ["VFR", "MVFR", "IFR", "LIFR", "UNK"]
+    # Day colors on LEDs 0-4, night (dim) colors on LEDs 5-9
+    for i, cat in enumerate(cats):
+        state.strip.setPixelColor(i,     Color(*state.COLOR_MAP.get(cat, (100, 100, 100))))
+        state.strip.setPixelColor(i + 5, Color(*state.COLOR_MAP_DIM.get(cat, (50, 50, 50))))
+    state.strip.show()
+    return {"ok": True}
+
+
+def handle_refresh() -> dict:
+    """Signal the main loop to fetch METARs immediately."""
+    state.refresh_event.set()
+    return {"ok": True}
+
+
+def handle_get_logs(lines: int = 100) -> dict:
+    """Return the last N lines of the log file."""
+    try:
+        text = _LOG_FILE.read_text(errors="replace")
+        entries = [l for l in text.splitlines() if l.strip()]
+        return {"lines": entries[-lines:]}
+    except FileNotFoundError:
+        return {"lines": []}
+    except Exception as exc:
+        logger.error("Could not read log: %s", exc)
+        return {"lines": [], "error": str(exc)}
 
 
 def handle_save_config(body: bytes) -> dict:
@@ -115,6 +159,33 @@ def handle_save_config(body: bytes) -> dict:
     else:
         timezone = None
 
+    def _parse_colors(raw) -> dict | None:
+        """Convert {cat: "#rrggbb"} to {cat: [R, G, B]}, return None if invalid."""
+        if not isinstance(raw, dict):
+            return None
+        result = {}
+        for cat, hex_val in raw.items():
+            if not isinstance(hex_val, str) or len(hex_val) != 7 or hex_val[0] != "#":
+                return None
+            try:
+                result[cat] = [int(hex_val[1:3], 16), int(hex_val[3:5], 16), int(hex_val[5:7], 16)]
+            except ValueError:
+                return None
+        return result
+
+    new_colors = None
+    new_dim_colors = None
+    if "colors" in data:
+        parsed = _parse_colors(data["colors"])
+        if parsed is not None:
+            config_data["colors"] = parsed
+            new_colors = parsed
+    if "dim_colors" in data:
+        parsed = _parse_colors(data["dim_colors"])
+        if parsed is not None:
+            config_data["dim_colors"] = parsed
+            new_dim_colors = parsed
+
     try:
         validate_config(config_data)
     except ValueError as exc:
@@ -128,6 +199,10 @@ def handle_save_config(body: bytes) -> dict:
         state.LED_COUNT = num_leds
     if timezone is not None:
         state.status_display["timezone"] = timezone or None
+    if new_colors is not None:
+        state.COLOR_MAP.update({k: tuple(v) for k, v in new_colors.items()})
+    if new_dim_colors is not None:
+        state.COLOR_MAP_DIM.update({k: tuple(v) for k, v in new_dim_colors.items()})
 
     logger.info("Config saved via web UI — %d airports, home=%s", len(airports), home or "unset")
     return {"ok": True}
@@ -146,6 +221,8 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_json(get_status_json())
         elif self.path == "/api/config":
             self.send_json(handle_get_config())
+        elif self.path == "/api/logs":
+            self.send_json(handle_get_logs())
         else:
             self.send_error(404)
 
@@ -157,6 +234,10 @@ class WebHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/config":
             length = int(self.headers.get("Content-Length", 0))
             self.send_json(handle_save_config(self.rfile.read(length)))
+        elif self.path == "/api/refresh":
+            self.send_json(handle_refresh())
+        elif self.path == "/api/leds/test":
+            self.send_json(handle_test_colors())
         else:
             self.send_error(404)
 
