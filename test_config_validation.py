@@ -35,7 +35,6 @@ class TestValidateConfigValid(unittest.TestCase):
             "colors": {"VFR": [0, 140, 0], "MVFR": [0, 0, 140]},
             "dim_colors": {"VFR": [0, 45, 0]},
             "num_leds": 100,
-            "led_cycle": ["CYYZ", "CYTZ", "", "CYOW"],
         }
         validate_config(data)
 
@@ -57,19 +56,6 @@ class TestValidateConfigValid(unittest.TestCase):
     def test_num_leds_missing_is_ok(self):
         """Missing num_leds field does not cause error."""
         data = {"airports": ["CYYZ"]}
-        validate_config(data)
-
-    def test_led_cycle_missing_is_ok(self):
-        """Missing led_cycle field does not cause error."""
-        data = {"airports": ["CYYZ"]}
-        validate_config(data)
-
-    def test_empty_string_in_led_cycle(self):
-        """Empty strings in led_cycle are valid."""
-        data = {
-            "airports": ["CYYZ"],
-            "led_cycle": ["", "", "CYYZ", ""],
-        }
         validate_config(data)
 
     def test_numeric_icao_codes(self):
@@ -310,39 +296,6 @@ class TestValidateConfigNumLeds(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             validate_config(data)
         self.assertIn("'100'", str(ctx.exception))
-
-
-class TestValidateConfigLedCycle(unittest.TestCase):
-    """Test led_cycle validation."""
-
-    def test_led_cycle_invalid_icao(self):
-        """Invalid ICAO in led_cycle fails."""
-        data = {"airports": ["CYYZ"], "led_cycle": ["cyyz"]}
-        with self.assertRaises(ValueError) as ctx:
-            validate_config(data)
-        self.assertIn("cyyz", str(ctx.exception))
-
-    def test_led_cycle_not_list(self):
-        """Non-list led_cycle fails."""
-        data = {"airports": ["CYYZ"], "led_cycle": "CYYZ"}
-        with self.assertRaises(ValueError) as ctx:
-            validate_config(data)
-        self.assertIn("must be a list", str(ctx.exception))
-
-    def test_led_cycle_empty_string_ok(self):
-        """Empty string in led_cycle passes."""
-        data = {"airports": ["CYYZ"], "led_cycle": [""]}
-        validate_config(data)
-
-    def test_led_cycle_valid_icao_ok(self):
-        """Valid ICAO in led_cycle passes."""
-        data = {"airports": ["CYYZ"], "led_cycle": ["CYYZ", "CYTZ"]}
-        validate_config(data)
-
-    def test_led_cycle_mixed_valid(self):
-        """Mixed valid entries in led_cycle pass."""
-        data = {"airports": ["CYYZ"], "led_cycle": ["CYYZ", "", "CYTZ", ""]}
-        validate_config(data)
 
 
 class TestValidateConfigMultipleErrors(unittest.TestCase):

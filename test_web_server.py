@@ -1,4 +1,4 @@
-"""Tests for web server API endpoints and LED cycle functionality."""
+"""Tests for web server API endpoints."""
 
 import unittest
 from unittest.mock import MagicMock, patch
@@ -20,76 +20,26 @@ sys.modules["astral.sun"] = MagicMock()
 sys.modules["astral.LocationInfo"] = MagicMock()
 
 from runmap import (
-    led_cycle_map,
-    led_cycle_lock,
     current_airports,
     LED_COUNT,
     status_display,
     get_status_json,
     start_web_server,
     HTML_TEMPLATE,
-    configure_lock,
 )
 from http.server import HTTPServer
-
-
-class TestLedCycleGlobal(unittest.TestCase):
-    """Test LED cycle global state management."""
-
-    def setUp(self):
-        import runmap
-        with led_cycle_lock:
-            runmap.led_cycle_map.clear()
-        current_airports.clear()
-        status_display['home_airport'] = "CYYZ"
-        status_display['timezone'] = "America/Toronto"
-        status_display['last_metar'] = None
-        status_display['ip_address'] = "192.168.1.100"
-
-    def test_led_cycle_empty_init(self):
-        """LED cycle map starts empty."""
-        with led_cycle_lock:
-            self.assertEqual(led_cycle_map, [])
-
-    def test_led_cycle_can_be_populated(self):
-        """LED cycle map can be populated."""
-        with led_cycle_lock:
-            led_cycle_map.extend(["CYYZ", "CYTZ", "CYOW"])
-        with led_cycle_lock:
-            self.assertEqual(len(led_cycle_map), 3)
-            self.assertEqual(led_cycle_map[0], "CYYZ")
-
-    def test_led_cycle_truncated_on_load(self):
-        """LED cycle map is truncated to LED_COUNT when loaded from config."""
-        # Simulate loading with truncation (as load_config does)
-        import runmap
-        with led_cycle_lock:
-            runmap.led_cycle_map.extend(["CYYZ"] * 150)
-            runmap.led_cycle_map = runmap.led_cycle_map[:LED_COUNT]
-        with led_cycle_lock:
-            self.assertLessEqual(len(runmap.led_cycle_map), LED_COUNT)
-
-    def test_current_airports_stored(self):
-        """Current airports list is stored in global."""
-        current_airports.extend(["CYYZ", "CYTZ"])
-        self.assertEqual(current_airports, ["CYYZ", "CYTZ"])
 
 
 class TestStatusJson(unittest.TestCase):
     """Test get_status_json function."""
 
     def setUp(self):
-        import runmap
-        with led_cycle_lock:
-            runmap.led_cycle_map.clear()
         current_airports.clear()
         current_airports.extend(["CYYZ", "CYTZ"])
         status_display['home_airport'] = "CYYZ"
         status_display['timezone'] = "America/Toronto"
         status_display['last_metar'] = None
         status_display['ip_address'] = "192.168.1.100"
-        with configure_lock:
-            runmap.configure_mode = False
 
     def test_status_json_structure(self):
         """get_status_json returns expected keys."""
@@ -100,7 +50,6 @@ class TestStatusJson(unittest.TestCase):
         self.assertIn("last_metar", result)
         self.assertIn("ip_address", result)
         self.assertIn("led_count", result)
-        self.assertIn("led_cycle", result)
 
     def test_status_json_airports(self):
         """get_status_json returns correct airports list."""
@@ -111,13 +60,6 @@ class TestStatusJson(unittest.TestCase):
         """get_status_json returns LED_COUNT."""
         result = get_status_json()
         self.assertEqual(result["led_count"], LED_COUNT)
-
-    def test_status_json_empty_led_cycle(self):
-        """get_status_json returns empty led_cycle when none set."""
-        with led_cycle_lock:
-            led_cycle_map.clear()
-        result = get_status_json()
-        self.assertEqual(result["led_cycle"], [])
 
 
 class TestHtmlTemplate(unittest.TestCase):
@@ -131,36 +73,7 @@ class TestHtmlTemplate(unittest.TestCase):
     def test_template_has_required_elements(self):
         """HTML template contains required UI elements."""
         self.assertIn("METAR Map Control", HTML_TEMPLATE)
-        self.assertIn("led-grid", HTML_TEMPLATE)
-        self.assertIn("save-btn", HTML_TEMPLATE)
-        self.assertIn("saveLedCycle", HTML_TEMPLATE)
-        self.assertIn("/api/led_cycle", HTML_TEMPLATE)
         self.assertIn("/api/status", HTML_TEMPLATE)
-
-    def test_template_has_led_inputs(self):
-        """HTML template generates LED input fields."""
-        self.assertIn("led-", HTML_TEMPLATE)
-        self.assertIn("LED_COUNT", HTML_TEMPLATE)
-
-    def test_template_has_configure_elements(self):
-        """HTML template contains configure mode UI elements."""
-        self.assertIn("configure-controls", HTML_TEMPLATE)
-        self.assertIn("configure-info", HTML_TEMPLATE)
-        self.assertIn("stopConfigure", HTML_TEMPLATE)
-        self.assertIn("startConfigure", HTML_TEMPLATE)
-        self.assertIn("assignAirport", HTML_TEMPLATE)
-        self.assertIn("/api/configure/start", HTML_TEMPLATE)
-        self.assertIn("/api/configure/stop", HTML_TEMPLATE)
-        self.assertIn("/api/configure/assign", HTML_TEMPLATE)
-        self.assertIn("handleConfigKey", HTML_TEMPLATE)
-        self.assertIn("focusNextConfigureInput", HTML_TEMPLATE)
-
-    def test_template_has_configure_styles(self):
-        """HTML template contains configure mode CSS styles."""
-        self.assertIn("btn-danger", HTML_TEMPLATE)
-        self.assertIn("btn-primary", HTML_TEMPLATE)
-        self.assertIn("config-header", HTML_TEMPLATE)
-        self.assertIn("led-cell.active", HTML_TEMPLATE)
 
 
 class TestWebServerStart(unittest.TestCase):
@@ -182,49 +95,8 @@ class TestWebServerStart(unittest.TestCase):
         self.assertTrue(kwargs.get('daemon', False))
 
 
-class TestConfigureModeGlobals(unittest.TestCase):
-    """Test configure mode global state management."""
-
-    def setUp(self):
-        import runmap
-        with led_cycle_lock:
-            runmap.led_cycle_map.clear()
-        with configure_lock:
-            runmap.configure_mode = False
-        current_airports.clear()
-
-    def test_configure_mode_starts_false(self):
-        """Configure mode starts as False."""
-        import runmap
-        with configure_lock:
-            self.assertFalse(runmap.configure_mode)
-
-    def test_configure_mode_can_be_set_true(self):
-        """Configure mode can be set to True."""
-        import runmap
-        with configure_lock:
-            runmap.configure_mode = True
-        with configure_lock:
-            self.assertTrue(runmap.configure_mode)
-
-    def test_configure_lock_exists(self):
-        """Configure lock is a threading.Lock."""
-        self.assertIsInstance(configure_lock, type(threading.Lock()))
-
-
-class TestArgparseNoCycleAirports(unittest.TestCase):
-    """Test that --cycle_airports argument has been removed."""
-
-    def test_no_cycle_airports_argument(self):
-        """--cycle_airports should not be a valid argument."""
-        import runmap
-        # The parser should not recognize --cycle_airports
-        with self.assertRaises(SystemExit):
-            runmap.parser.parse_args(['--cycle_airports'])
-
-
 class TestNoneCode(unittest.TestCase):
-    """Test NONE code handling in airports and led_cycle."""
+    """Test NONE code handling in airports."""
 
     def test_is_none_code(self):
         """_is_none_code returns True for NONE."""
@@ -250,16 +122,6 @@ class TestNoneCode(unittest.TestCase):
         valid_config = {
             "airports": ["CYYZ", "NONE", "CYTZ"],
             "home": "CYYZ",
-        }
-        # Should not raise
-        runmap.validate_config(valid_config)
-
-    def test_validate_allows_none_in_led_cycle(self):
-        """validate_config allows NONE in led_cycle."""
-        import runmap
-        valid_config = {
-            "airports": ["CYYZ", "CYTZ"],
-            "led_cycle": ["CYYZ", "NONE", "CYTZ", ""],
         }
         # Should not raise
         runmap.validate_config(valid_config)

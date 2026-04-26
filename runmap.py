@@ -1,4 +1,4 @@
-"""LED METAR Map - v5.0 (ceiling-based category + web UI + LED cycle + guided configure)
+"""LED METAR Map - v5.0 (ceiling-based category + web UI)
 =================================================================================
 The AviationWeather.gov JSON feed no longer includes `flight_category`.
 This version derives VFR/MVFR/IFR/LIFR from the **cloud ceiling** in each
@@ -111,13 +111,7 @@ LOG_FILE = Path(__file__).with_name("metar_led.log")
 UPDATE_INTERVAL = 60  # refresh data every 60 seconds
 
 # ───────────────────── Global State ─────────────────────────────────────────────
-led_cycle_map: List[str] = []
-led_cycle_lock = threading.Lock()
 current_airports: List[str] = []
-
-# Configure mode globals
-configure_mode = False
-configure_lock = threading.Lock()
 
 COLOR_MAP: Dict[str, Color] = {  # NOTE: colors are in RGB format!!
     "VFR": Color(0, 140, 0),
@@ -232,22 +226,13 @@ def validate_config(data: dict) -> None:
         if not isinstance(num_leds, int) or num_leds <= 0:
             errors.append(f"'num_leds' is {num_leds!r}, expected a positive integer")
 
-    led_cycle = data.get("led_cycle")
-    if led_cycle is not None:
-        if not isinstance(led_cycle, list):
-            errors.append("'led_cycle' must be a list")
-        else:
-            for i, entry in enumerate(led_cycle):
-                if entry != "" and not _is_valid_icao(entry) and not _is_none_code(entry):
-                    errors.append(f"'led_cycle[{i}]' is '{entry}', expected empty string, 'NONE', or valid 4-character ICAO code")
-
     if errors:
         formatted = "\n".join(f"  - {e}" for e in errors)
         raise ValueError(f"Configuration errors:\n{formatted}")
 
 
 def load_config() -> Tuple[List[str], str, Optional[str]]:
-    global led_cycle_map, current_airports
+    global current_airports
     try:
         data = json.loads(AIRPORT_FILE.read_text())
         validate_config(data)
@@ -267,15 +252,6 @@ def load_config() -> Tuple[List[str], str, Optional[str]]:
             logger.debug("old dim colors: %s", COLOR_MAP_DIM)
             COLOR_MAP_DIM = {k: Color(*v) for k, v in data["dim_colors"].items()}
             logger.debug("Loading dim colors from config: %s", COLOR_MAP_DIM)
-        led_cycle = data.get("led_cycle", [])
-        if led_cycle:
-            with led_cycle_lock:
-                led_cycle_map = led_cycle[:LED_COUNT]
-            logger.info("Loaded led_cycle with %d entries from config", len(led_cycle_map))
-        else:
-            with led_cycle_lock:
-                led_cycle_map = airports[:LED_COUNT] + [""] * (LED_COUNT - len(airports[:LED_COUNT]))
-            logger.info("Initialized led_cycle from airports list (%d entries)", len(led_cycle_map))
         current_airports = airports
         if not airports:
             raise ValueError("No airports in JSON")
@@ -615,31 +591,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
 h1 { text-align: center; color: #00ff88; margin-bottom: 20px; font-size: 1.5em; }
 h2 { color: #00ccff; margin: 15px 0 10px; font-size: 1.2em; border-bottom: 1px solid #333; padding-bottom: 5px; }
-#status { background: #16213e; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+#status { background: #16213e; padding: 15px; border-radius: 8px; }
 #status p { margin: 4px 0; }
 #status span { color: #00ff88; }
-.config-header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-.config-info { color: #00ff88; font-size: 0.9em; }
-.btn { display: inline-block; padding: 8px 20px; border: none; border-radius: 5px; font-family: monospace; font-size: 0.9em; cursor: pointer; font-weight: bold; }
-.btn-primary { background: #00ff88; color: #1a1a2e; }
-.btn-primary:hover { background: #00cc6a; }
-.btn-primary:active { background: #00aa55; }
-.btn-danger { background: #ff4444; color: #fff; }
-.btn-danger:hover { background: #cc3333; }
-.btn:disabled { background: #555; color: #888; cursor: not-allowed; }
-.led-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; max-width: 100%; }
-.led-cell { background: #16213e; padding: 4px; border-radius: 4px; text-align: center; }
-.led-cell label { display: block; font-size: 0.7em; color: #888; margin-bottom: 2px; }
-.led-cell input { width: 100%; background: #0f3460; border: 1px solid #333; color: #e0e0e0; padding: 4px 2px; text-align: center; font-size: 0.8em; font-family: monospace; border-radius: 3px; }
-.led-cell input:focus { outline: none; border-color: #00ff88; }
-.led-cell.active { border: 2px solid #00ff88; background: #1a3a2e; }
-.led-cell.active input { border-color: #00ff88; background: #0a2a1e; }
-#save-btn { display: block; margin: 20px auto; padding: 10px 30px; background: #00ff88; color: #1a1a2e; border: none; border-radius: 5px; font-family: monospace; font-size: 1em; cursor: pointer; font-weight: bold; }
-#save-btn:hover { background: #00cc6a; }
-#save-btn:active { background: #00aa55; }
-#msg { text-align: center; margin-top: 10px; min-height: 20px; }
-.msg-ok { color: #00ff88; }
-.msg-err { color: #ff4444; }
 </style>
 </head>
 <body>
@@ -648,21 +602,15 @@ h2 { color: #00ccff; margin: 15px 0 10px; font-size: 1.2em; border-bottom: 1px s
 <div id="status">
 <p>Loading...</p>
 </div>
-<h2>LED Cycle</h2>
-<div id="configure-controls" style="display:none;">
-<div class="config-header">
-<span class="config-info" id="configure-info">Configuring...</span>
-<button class="btn btn-danger" onclick="stopConfigure()">Cancel Configuration</button>
-</div>
-</div>
-<p style="margin-bottom:10px;font-size:0.85em;color:#888;">Each LED position maps to an airport code. Leave blank to keep LED off.</p>
-<div class="led-grid" id="led-grid"></div>
-<button id="save-btn" onclick="saveLedCycle()">Save LED Cycle</button>
-<div id="msg"></div>
 <script>
-var LED_COUNT = 100;
-var configureActive = false;
-var configureIndex = 0;
+function refreshStatus() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/status', true);
+    xhr.onload = function() {
+        if (xhr.status === 200) setStatus(JSON.parse(xhr.responseText));
+    };
+    xhr.send();
+}
 function setStatus(data) {
     var el = document.getElementById('status');
     if (!data) { el.innerHTML = '<p>Error loading status</p>'; return; }
@@ -675,165 +623,6 @@ function setStatus(data) {
     if (data.led_count) html += '<p>LEDs: <span>' + data.led_count + '</span></p>';
     el.innerHTML = html;
 }
-function buildGrid(ledCycle) {
-    var grid = document.getElementById('led-grid');
-    grid.innerHTML = '';
-    for (var i = 0; i < LED_COUNT; i++) {
-        var cell = document.createElement('div');
-        cell.className = 'led-cell';
-        cell.id = 'cell-' + i;
-        var label = document.createElement('label');
-        label.textContent = 'LED ' + i;
-        var inp = document.createElement('input');
-        inp.type = 'text';
-        inp.maxLength = 4;
-        inp.id = 'led-' + i;
-        inp.value = (ledCycle[i] || '');
-        inp.placeholder = '-----';
-        inp.onkeydown = handleConfigKey;
-        cell.appendChild(label);
-        cell.appendChild(inp);
-        grid.appendChild(cell);
-    }
-}
-function startConfigure() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/configure/start', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            configureActive = true;
-            document.getElementById('configure-controls').style.display = 'block';
-            document.getElementById('save-btn').disabled = true;
-            focusNextConfigureInput();
-        } else {
-            showMessage('Failed to start configure', 'err');
-        }
-    };
-    xhr.onerror = function() { showMessage('Network error', 'err'); };
-    xhr.send('{}');
-}
-function stopConfigure() {
-    configureActive = false;
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/configure/stop', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.onload = function() {
-        document.getElementById('configure-controls').style.display = 'none';
-        document.getElementById('save-btn').disabled = false;
-        clearAllHighlights();
-        showMessage('Configuration cancelled', 'ok');
-    };
-    xhr.onerror = function() { showMessage('Network error', 'err'); };
-    xhr.send('{}');
-}
-function assignAirport() {
-    var inp = document.getElementById('led-' + configureIndex);
-    var airport = inp.value.trim().toUpperCase();
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/configure/assign', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            showMessage('Assigned ' + (airport || '(blank)') + ' to LED ' + configureIndex, 'ok');
-            configureIndex++;
-            if (configureIndex >= LED_COUNT) {
-                stopConfigure();
-            } else {
-                focusNextConfigureInput();
-            }
-        } else {
-            showMessage('Error assigning airport', 'err');
-        }
-    };
-    xhr.onerror = function() { showMessage('Network error', 'err'); };
-    xhr.send(JSON.stringify({index: configureIndex, airport: airport}));
-}
-function handleConfigKey(e) {
-    if (e.key === 'Enter' && configureActive) {
-        e.preventDefault();
-        assignAirport();
-    }
-}
-function focusNextConfigureInput() {
-    clearAllHighlights();
-    if (configureIndex < LED_COUNT) {
-        var inp = document.getElementById('led-' + configureIndex);
-        var cell = document.getElementById('cell-' + configureIndex);
-        if (inp) {
-            inp.focus();
-            inp.select();
-        }
-        if (cell) {
-            cell.classList.add('active');
-        }
-        updateConfigureInfo();
-    }
-}
-function clearAllHighlights() {
-    for (var i = 0; i < LED_COUNT; i++) {
-        var cell = document.getElementById('cell-' + i);
-        if (cell) cell.classList.remove('active');
-    }
-}
-function updateConfigureInfo() {
-    var info = document.getElementById('configure-info');
-    if (info) {
-        info.textContent = 'LED ' + configureIndex + ' of ' + LED_COUNT + ': enter airport code and press Enter';
-    }
-}
-function saveLedCycle() {
-    var map = [];
-    for (var i = 0; i < LED_COUNT; i++) {
-        var v = document.getElementById('led-' + i).value.trim().toUpperCase();
-        map.push(v);
-    }
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/led_cycle', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.onload = function() {
-        var msg = document.getElementById('msg');
-        if (xhr.status === 200) {
-            msg.textContent = 'Saved!';
-            msg.className = 'msg-ok';
-        } else {
-            msg.textContent = 'Error saving';
-            msg.className = 'msg-err';
-        }
-    };
-    xhr.onerror = function() {
-        var msg = document.getElementById('msg');
-        msg.textContent = 'Network error';
-        msg.className = 'msg-err';
-    };
-    xhr.send(JSON.stringify({led_cycle: map}));
-}
-function refreshStatus() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/api/status', true);
-    xhr.onload = function() {
-        if (xhr.status === 200) setStatus(JSON.parse(xhr.responseText));
-    };
-    xhr.send();
-}
-function loadLedCycle() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/api/led_cycle', true);
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            var data = JSON.parse(xhr.responseText);
-            LED_COUNT = data.led_count || 100;
-            buildGrid(data.led_cycle || []);
-        }
-    };
-    xhr.send();
-}
-function showMessage(text, type) {
-    var msg = document.getElementById('msg');
-    msg.textContent = text;
-    msg.className = 'msg-' + type;
-}
-loadLedCycle();
 refreshStatus();
 setInterval(refreshStatus, 60000);
 </script>
@@ -843,10 +632,6 @@ setInterval(refreshStatus, 60000);
 
 
 def get_status_json() -> dict:
-    with led_cycle_lock:
-        lc = list(led_cycle_map)
-    with configure_lock:
-        cfg_active = configure_mode
     return {
         "airports": current_airports,
         "home": status_display.get("home_airport"),
@@ -854,7 +639,6 @@ def get_status_json() -> dict:
         "last_metar": status_display['last_metar'].isoformat() if status_display.get('last_metar') else None,
         "ip_address": status_display.get("ip_address"),
         "led_count": LED_COUNT,
-        "led_cycle": lc,
     }
 
 
@@ -864,91 +648,11 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_html(HTML_TEMPLATE)
         elif self.path == '/api/status':
             self.send_json(get_status_json())
-        elif self.path == '/api/led_cycle':
-            with led_cycle_lock:
-                lc = list(led_cycle_map)
-            with configure_lock:
-                cfg_active = configure_mode
-            self.send_json({"led_cycle": lc, "led_count": LED_COUNT, "configure_active": cfg_active})
-        elif self.path == '/api/configure':
-            with configure_lock:
-                cfg_active = configure_mode
-            self.send_json({"active": cfg_active})
         else:
             self.send_error(404)
 
     def do_POST(self):
-        global led_cycle_map, configure_mode
-        if self.path == '/api/led_cycle':
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length)
-            try:
-                data = json.loads(post_data)
-            except json.JSONDecodeError:
-                self.send_error(400, "Invalid JSON")
-                return
-            new_map = data.get("led_cycle", [])
-            if not isinstance(new_map, list):
-                self.send_error(400, "led_cycle must be an array")
-                return
-            with led_cycle_lock:
-                led_cycle_map = new_map[:LED_COUNT]
-            try:
-                config = json.loads(AIRPORT_FILE.read_text())
-                config["led_cycle"] = led_cycle_map
-                AIRPORT_FILE.write_text(json.dumps(config, indent=2) + "\n")
-            except Exception as e:
-                logger.error("Failed to save led_cycle to config.json: %s", e)
-                self.send_error(500, "Failed to save config")
-                return
-            self.send_json({"status": "ok"})
-
-        elif self.path == '/api/configure/start':
-            with configure_lock:
-                configure_mode = True
-            logger.info("Configure mode started")
-            self.send_json({"status": "ok"})
-
-        elif self.path == '/api/configure/stop':
-            with configure_lock:
-                configure_mode = False
-            logger.info("Configure mode stopped")
-            self.send_json({"status": "ok"})
-
-        elif self.path == '/api/configure/assign':
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length)
-            try:
-                data = json.loads(post_data)
-            except json.JSONDecodeError:
-                self.send_error(400, "Invalid JSON")
-                return
-            idx = data.get("index")
-            airport = data.get("airport", "")
-            if not isinstance(idx, int) or idx < 0 or idx >= LED_COUNT:
-                self.send_error(400, "Invalid index")
-                return
-            if not isinstance(airport, str):
-                self.send_error(400, "airport must be a string")
-                return
-            if airport and not _is_valid_icao(airport) and not _is_none_code(airport):
-                self.send_error(400, f"Invalid ICAO code: {airport}")
-                return
-            with led_cycle_lock:
-                led_cycle_map[idx] = airport
-            try:
-                config = json.loads(AIRPORT_FILE.read_text())
-                config["led_cycle"] = led_cycle_map
-                AIRPORT_FILE.write_text(json.dumps(config, indent=2) + "\n")
-            except Exception as e:
-                logger.error("Failed to save led_cycle to config.json: %s", e)
-                self.send_error(500, "Failed to save config")
-                return
-            logger.info("Configure assigned LED %d -> %s", idx, airport)
-            self.send_json({"status": "ok"})
-
-        else:
-            self.send_error(404)
+        self.send_error(404)
 
     def send_html(self, html):
         self.send_response(200)
@@ -977,14 +681,8 @@ def start_web_server(port=8080):
 # ───────────────────── Main ────────────────────────────────────────────────
 
 def main():
-    global led_cycle_map
-
     airports, home, tz_str = load_config()
     logger.info("Timezone: %s", tz_str or "UTC")
-
-    # Determine LED mapping source
-    with led_cycle_lock:
-        has_led_cycle = len(led_cycle_map) > 0
 
     # Setup LED Strip and OLED Display
     strip = PixelStrip(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
@@ -1029,10 +727,7 @@ def main():
         update_display_normal(oled, status_test)
         return
 
-    if has_led_cycle:
-        logger.info("LED Cycle mode: %d LEDs mapped to airports", len(led_cycle_map))
-    else:
-        logger.info("Monitoring: %s", ", ".join(airports))
+    logger.info("Monitoring: %s", ", ".join(airports))
 
     # Start web server if requested
     if args.web:
@@ -1045,30 +740,6 @@ def main():
 
     try:
         while True:
-            # Check for configure mode
-            with configure_lock:
-                cfg_active = configure_mode
-
-            if cfg_active:
-                with configure_lock:
-                    cfg_mode = configure_mode
-                if cfg_mode:
-                    logger.info("Configure mode active, waiting for assignments...")
-                    status_display['other_text'] = "CONFIGURE"
-                    update_display_normal(oled, status_display)
-                    # Keep OLED showing configure status
-                    while True:
-                        with configure_lock:
-                            cfg_mode = configure_mode
-                        if not cfg_mode:
-                            break
-                        status_display['time'] = datetime.now()
-                        update_display_normal(oled, status_display)
-                        time.sleep(2)
-                    status_display['other_text'] = None
-                    logger.info("Configure mode ended")
-                continue
-
             logger.info("Night Mode: %s", get_is_night(home_location))
             metars = []
             tries = 0
@@ -1130,20 +801,7 @@ def main():
 
             cats = parse_metar_statuses(metars, airports)
 
-            # Use led_cycle_map for LED display if available, otherwise use airports
-            if has_led_cycle:
-                # Build a dict mapping airport -> category for led_cycle airports
-                cats_for_display = {}
-                display_airports = []
-                for icao in led_cycle_map:
-                    if icao and not _is_none_code(icao):
-                        cats_for_display[icao] = cats.get(icao, "UNK")
-                        display_airports.append(icao)
-                    else:
-                        display_airports.append("")  # empty string or NONE = LED off
-                led_update(strip, display_airports, cats_for_display, night=get_is_night(home_location))
-            else:
-                led_update(strip, airports, cats, night=get_is_night(home_location))
+            led_update(strip, airports, cats, night=get_is_night(home_location))
 
             status_display['time'] = datetime.now()
             status_display['ip_address'], status_display['rssi'] = get_wifi_status()
