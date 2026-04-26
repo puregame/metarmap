@@ -156,6 +156,33 @@ tbody tr:hover { background: #161b22; }
 
 var _configLoaded = false;
 
+var TZ_LABELS = {
+  'America/St_Johns':   'Newfoundland (NST/NDT)',
+  'America/Halifax':    'Atlantic (AST/ADT)',
+  'America/Toronto':    'Eastern (EST/EDT)',
+  'America/New_York':   'Eastern (EST/EDT)',
+  'America/Chicago':    'Central (CST/CDT)',
+  'America/Denver':     'Mountain (MST/MDT)',
+  'America/Phoenix':    'Arizona (MST, no DST)',
+  'America/Vancouver':  'Pacific (PST/PDT)',
+  'America/Los_Angeles':'Pacific (PST/PDT)',
+  'America/Anchorage':  'Alaska (AKST/AKDT)',
+  'Pacific/Honolulu':   'Hawaii (HST)',
+  'Europe/London':      'London (GMT/BST)',
+  'Europe/Paris':       'Central Europe (CET/CEST)',
+  'Europe/Berlin':      'Central Europe (CET/CEST)',
+  'Europe/Helsinki':    'Eastern Europe (EET/EEST)',
+  'Europe/Moscow':      'Moscow (MSK)',
+  'Asia/Dubai':         'Gulf (GST)',
+  'Asia/Kolkata':       'India (IST)',
+  'Asia/Bangkok':       'Indochina (ICT)',
+  'Asia/Shanghai':      'China (CST)',
+  'Asia/Tokyo':         'Japan (JST)',
+  'Australia/Sydney':   'Sydney (AEST/AEDT)',
+  'Pacific/Auckland':   'New Zealand (NZST/NZDT)',
+  'UTC':                'UTC',
+};
+
 /* ── Tab switching ── */
 function showTab(name, btn) {
   document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
@@ -183,7 +210,7 @@ function renderStatus(d) {
   var html = '';
   if (d.airports)   html += row('Airports',   d.airports.length + ' configured');
   if (d.home)       html += row('Home',       d.home);
-  if (d.timezone)   html += row('Timezone',   d.timezone);
+  if (d.timezone)   html += row('Timezone',   TZ_LABELS[d.timezone] || d.timezone);
   if (d.last_metar) html += row('Last METAR', timeSince(d.last_metar));
   if (d.ip_address) html += row('IP',         d.ip_address);
   if (d.led_count)  html += row('LEDs',       d.led_count);
