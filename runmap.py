@@ -272,6 +272,10 @@ def load_config() -> Tuple[List[str], str, Optional[str]]:
             with led_cycle_lock:
                 led_cycle_map = led_cycle[:LED_COUNT]
             logger.info("Loaded led_cycle with %d entries from config", len(led_cycle_map))
+        else:
+            with led_cycle_lock:
+                led_cycle_map = airports[:LED_COUNT] + [""] * (LED_COUNT - len(airports[:LED_COUNT]))
+            logger.info("Initialized led_cycle from airports list (%d entries)", len(led_cycle_map))
         current_airports = airports
         if not airports:
             raise ValueError("No airports in JSON")

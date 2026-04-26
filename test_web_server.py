@@ -280,6 +280,7 @@ class TestNoneCode(unittest.TestCase):
         import runmap
         from unittest.mock import MagicMock
         strip = MagicMock()
+        strip.numPixels.return_value = 100
         cats = {"CYYZ": "VFR", "NONE": "UNK"}
         runmap.led_update(strip, ["CYYZ", "NONE", "CYTZ"], cats)
         strip.setPixelColor.assert_any_call(0, runmap.Color(0, 140, 0))  # VFR = green
