@@ -444,11 +444,11 @@ def led_update(strip: PixelStrip, airports: List[str], cats: Dict[str, str], nig
     for i, icao in enumerate(airports):
         if i >= strip.numPixels():
             break
-        if _is_none_code(icao):
+        if not icao or _is_none_code(icao):
             strip.setPixelColor(i, Color(0, 0, 0))
         else:
             strip.setPixelColor(i, category_to_color(cats.get(icao, "UNK"), night_mode=night))
-        logger.info("%s > %s", icao, cats.get(icao, "UNK"))
+            logger.info("%s > %s", icao, cats.get(icao, "UNK"))
     strip.show()
 
 
