@@ -1091,9 +1091,10 @@ def main():
                     status_display['other_text'] = None
                     break
 
-                delay = min(base_delay * (2 ** (tries - 1)), 30)
-                logger.info("METAR fetch failed, retrying in %d seconds (attempt %d/%d)...", delay, tries, max_retries)
-                time.sleep(delay)
+                if metars == []:
+                    delay = min(base_delay * (2 ** (tries - 1)), 30)
+                    logger.info("METAR fetch failed, retrying in %d seconds (attempt %d/%d)...", delay, tries, max_retries)
+                    time.sleep(delay)
 
             with open('latest_metars.json', "w") as f:
                 json.dump(metars, f, indent=4)
