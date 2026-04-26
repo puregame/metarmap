@@ -17,6 +17,7 @@ from utils import utc_to_local
 logger = logging.getLogger("metar_led")
 
 font = ImageFont.load_default(size=11)
+font_med = ImageFont.load_default(size=12)
 font_large = ImageFont.load_default(size=16)
 
 
@@ -169,10 +170,10 @@ def update_display_normal(oled, display_data: dict) -> None:
 
     draw.text((0, 0), top_text, font=font_large, fill=255)
 
-    bbox_now = draw.textbbox((0, 0), now_text, font=font)
+    bbox_now = draw.textbbox((0, 0), now_text, font=font_med)
     now_width = bbox_now[2] - bbox_now[0]
-    draw.text((oled.width - now_width - 2, 12), now_text, font=font, fill=255)
-    draw.text((2, 12), wx_text, font=font, fill=255)
+    draw.text((oled.width - now_width - 2, 14), now_text, font=font_med, fill=255)
+    draw.text((2, 14), wx_text, font=font_med, fill=255)
 
     oled.image(image)
     oled.show()
