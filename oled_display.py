@@ -6,7 +6,7 @@ Tests that import this module must mock PIL and astral via sys.modules before im
 import logging
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from astral import LocationInfo
 from astral.sun import sun
@@ -31,15 +31,44 @@ def display_show_airport(oled, airport: str) -> None:
 
 
 def get_is_night(location: LocationInfo) -> bool:
-    """Return True if the current UTC time is between dusk and dawn at location."""
+    """Return True if the current UTC time is outside the civil daylight window.
+
+    LocationInfo is stored with timezone="UTC" so astral computes sun times
+    anchored to UTC calendar dates. For locations west of UTC (e.g. North
+    America) the evening dusk of a local day falls on the NEXT UTC date, making
+    dusk appear before dawn on the same UTC date. We handle this by looking at
+    yesterday, today, and tomorrow to find the dawn/dusk pair that brackets now.
+    """
     now = datetime.now(timezone.utc)
-    sun_times = sun(location.observer, date=now.date(), tzinfo=timezone.utc)
-    logger.debug("home dawn: %s", sun_times["dawn"])
-    logger.debug("home dusk: %s", sun_times["dusk"])
-    logger.debug("now: %s", now)
-    if sun_times["dusk"] > sun_times["dawn"]:
-        return now < sun_times["dawn"] or now > sun_times["dusk"]
-    return True
+    today = now.date()
+
+    def _sun(d):
+        return sun(location.observer, date=d, tzinfo=timezone.utc)
+
+    try:
+        t_prev  = _sun(today - timedelta(days=1))
+        t_today = _sun(today)
+        t_next  = _sun(today + timedelta(days=1))
+    except Exception:
+        return True  # assume night if astral fails
+
+    # If today's dawn has already passed we are in today's solar day.
+    # Dusk for that solar day may fall on the next UTC date (west-of-UTC locs).
+    if t_today["dawn"] <= now:
+        dawn = t_today["dawn"]
+        dusk = t_today["dusk"] if t_today["dusk"] > dawn else t_next["dusk"]
+    else:
+        # Before today's dawn — still in yesterday's solar day.
+        dawn = t_prev["dawn"]
+        dusk = t_prev["dusk"] if t_prev["dusk"] > dawn else t_today["dusk"]
+
+    logger.debug("home dawn: %s", dawn)
+    logger.debug("home dusk: %s", dusk)
+    logger.debug("now:       %s", now)
+
+    if dusk <= dawn:
+        return True  # polar edge-case: sun never rises or never sets
+    return now < dawn or now > dusk
 
 
 def update_display_normal(oled, display_data: dict) -> None:
