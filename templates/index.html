@@ -33,6 +33,8 @@ h1 { text-align: center; color: #00ff88; margin-bottom: 20px; font-size: 1.4em; 
 .text-input { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e0e0e0; font-family: monospace; font-size: 0.95em; padding: 5px 8px; width: 100%; }
 .text-input:focus { border-color: #58a6ff; outline: none; }
 input[type=number].text-input { width: 120px; }
+select.text-input { cursor: pointer; }
+select.text-input option, select.text-input optgroup { background: #161b22; }
 
 /* Toolbar */
 .toolbar { display: flex; gap: 10px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
@@ -95,7 +97,38 @@ tbody tr:hover { background: #161b22; }
       </div>
 
       <label>Timezone</label>
-      <input id="cfg-timezone" class="text-input" type="text" placeholder="America/Toronto (optional)">
+      <select id="cfg-timezone" class="text-input">
+        <option value="">— None —</option>
+        <optgroup label="North America">
+          <option value="America/St_Johns">Newfoundland (NST/NDT)</option>
+          <option value="America/Halifax">Atlantic (AST/ADT)</option>
+          <option value="America/Toronto">Eastern (EST/EDT)</option>
+          <option value="America/Chicago">Central (CST/CDT)</option>
+          <option value="America/Denver">Mountain (MST/MDT)</option>
+          <option value="America/Phoenix">Arizona (MST, no DST)</option>
+          <option value="America/Vancouver">Pacific (PST/PDT)</option>
+          <option value="America/Anchorage">Alaska (AKST/AKDT)</option>
+          <option value="Pacific/Honolulu">Hawaii (HST)</option>
+        </optgroup>
+        <optgroup label="Europe">
+          <option value="Europe/London">London (GMT/BST)</option>
+          <option value="Europe/Paris">Central Europe (CET/CEST)</option>
+          <option value="Europe/Helsinki">Eastern Europe (EET/EEST)</option>
+          <option value="Europe/Moscow">Moscow (MSK)</option>
+        </optgroup>
+        <optgroup label="Asia / Pacific">
+          <option value="Asia/Dubai">Gulf (GST)</option>
+          <option value="Asia/Kolkata">India (IST)</option>
+          <option value="Asia/Bangkok">Indochina (ICT)</option>
+          <option value="Asia/Shanghai">China (CST)</option>
+          <option value="Asia/Tokyo">Japan (JST)</option>
+          <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+          <option value="Pacific/Auckland">New Zealand (NZST/NZDT)</option>
+        </optgroup>
+        <optgroup label="UTC">
+          <option value="UTC">UTC</option>
+        </optgroup>
+      </select>
     </div>
   </div>
 
