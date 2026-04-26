@@ -18,6 +18,7 @@ logger = logging.getLogger("metar_led")
 
 font = ImageFont.load_default(size=11)
 font_med = ImageFont.load_default(size=12)
+font_big = ImageFont.load_default(size=14)
 font_large = ImageFont.load_default(size=16)
 
 
@@ -154,7 +155,7 @@ def update_display_normal(oled, display_data: dict) -> None:
     now_text = now_local.strftime("%H:%M") if now_local else "N/A"
 
     cycle_time = display_data.get("cycle_time", 0)
-    cycle_index = int(time.time()) % 12 // 3 if cycle_time else 0
+    cycle_index = int(time.time()) % 20 // 5 if cycle_time else 0
 
     if display_data.get("other_text"):
         top_text = display_data["other_text"]
@@ -170,10 +171,10 @@ def update_display_normal(oled, display_data: dict) -> None:
 
     draw.text((0, 0), top_text, font=font_large, fill=255)
 
-    bbox_now = draw.textbbox((0, 0), now_text, font=font_med)
+    bbox_now = draw.textbbox((0, 0), now_text, font=font_big)
     now_width = bbox_now[2] - bbox_now[0]
-    draw.text((oled.width - now_width - 2, 14), now_text, font=font_med, fill=255)
-    draw.text((2, 14), wx_text, font=font_med, fill=255)
+    draw.text((oled.width - now_width - 2, 18), now_text, font=font_big, fill=255)
+    draw.text((2, 18), wx_text, font=font_big, fill=255)
 
     oled.image(image)
     oled.show()
