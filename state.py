@@ -6,7 +6,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 LED_COUNT: int = 100
 current_airports: List[str] = []
-strip: Any = None  # PixelStrip instance set by main() after hardware init
+strip: Any = None          # PixelStrip instance set by main() after hardware init
+strip_needs_reinit: bool = False  # set True when LED_COUNT changes; main loop reinits
+home_location: Any = None  # astral LocationInfo, set by main() for sun calculations
 categories: Dict[str, str] = {}  # airport -> VFR/MVFR/IFR/LIFR/UNK
 is_night: bool = False
 refresh_event: threading.Event = threading.Event()

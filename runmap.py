@@ -113,9 +113,21 @@ def main() -> None:
 
     wait_for_wifi(oled)
     home_location = home_airport_get_sun(home)
+    state.home_location = home_location
 
     try:
         while True:
+            if state.strip_needs_reinit:
+                logger.info("Reinitializing LED strip with %d pixels", state.LED_COUNT)
+                led_clear(strip)
+                strip = PixelStrip(
+                    state.LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
+                )
+                strip.begin()
+                state.strip = strip
+                state.strip_needs_reinit = False
+                logger.info("LED strip reinitialized")
+
             airports = state.current_airports  # picks up any saves from the web UI
             night = get_is_night(home_location)
             state.is_night = night  # update regardless of METAR fetch success

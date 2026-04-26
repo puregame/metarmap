@@ -71,8 +71,10 @@ def handle_flash_led(index: int) -> dict:
     """Flash one LED three times so the user can identify it physically."""
     if state.strip is None:
         return {"error": "LED strip not initialised"}
-    if index < 0 or index >= state.strip.numPixels():
-        return {"error": f"LED index {index} out of range"}
+    if index < 0 or index >= state.LED_COUNT:
+        return {"error": f"LED index {index} out of range (configured: {state.LED_COUNT})"}
+    if index >= state.strip.numPixels():
+        return {"error": f"LED {index} not yet active — strip is reinitializing, try again in a moment"}
     from hardware import Color
     from led_control import led_set_single
     for _ in range(3):
@@ -81,6 +83,41 @@ def handle_flash_led(index: int) -> dict:
         led_set_single(state.strip, index, Color(0, 0, 0))
         time.sleep(0.15)
     return {"ok": True}
+
+
+def handle_get_debug() -> dict:
+    """Return raw night-mode calculation values for diagnostics."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    result = {
+        "utc_now":          now.isoformat(),
+        "is_night":         state.is_night,
+        "led_count":        state.LED_COUNT,
+        "strip_pixel_count": state.strip.numPixels() if state.strip else None,
+        "strip_needs_reinit": state.strip_needs_reinit,
+        "home_airport":     state.status_display.get("home_airport"),
+    }
+    loc = state.home_location
+    if loc is not None:
+        result["location"] = {
+            "name":      loc.name,
+            "latitude":  loc.latitude,
+            "longitude": loc.longitude,
+            "timezone":  loc.timezone,
+        }
+        try:
+            from astral.sun import sun as astral_sun
+            sun_times = astral_sun(loc.observer, date=now.date(), tzinfo=timezone.utc)
+            result["dawn_utc"]  = sun_times["dawn"].isoformat()
+            result["dusk_utc"]  = sun_times["dusk"].isoformat()
+            result["is_before_dawn"] = now < sun_times["dawn"]
+            result["is_after_dusk"]  = now > sun_times["dusk"]
+        except Exception as exc:
+            result["sun_error"] = str(exc)
+    else:
+        result["location"] = None
+        result["note"] = "home_location not set — main loop not yet started?"
+    return result
 
 
 def handle_test_colors() -> dict:
@@ -203,6 +240,9 @@ def handle_save_config(body: bytes) -> dict:
     # Hot-update runtime state where safe to do so
     state.current_airports = airports
     if num_leds is not None and isinstance(num_leds, int) and num_leds > 0:
+        if state.strip is not None and num_leds != state.strip.numPixels():
+            state.strip_needs_reinit = True
+            state.refresh_event.set()  # wake the main loop so reinit happens promptly
         state.LED_COUNT = num_leds
     if timezone is not None:
         state.status_display["timezone"] = timezone or None
@@ -228,6 +268,8 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_json(get_status_json())
         elif self.path == "/api/config":
             self.send_json(handle_get_config())
+        elif self.path == "/api/debug":
+            self.send_json(handle_get_debug())
         elif self.path.startswith("/api/logs"):
             from urllib.parse import parse_qs, urlparse
             qs = parse_qs(urlparse(self.path).query)
