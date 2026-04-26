@@ -223,5 +223,69 @@ class TestArgparseNoCycleAirports(unittest.TestCase):
             runmap.parser.parse_args(['--cycle_airports'])
 
 
+class TestNoneCode(unittest.TestCase):
+    """Test NONE code handling in airports and led_cycle."""
+
+    def test_is_none_code(self):
+        """_is_none_code returns True for NONE."""
+        import runmap
+        self.assertTrue(runmap._is_none_code("NONE"))
+        self.assertTrue(runmap._is_none_code("none"))
+        self.assertTrue(runmap._is_none_code("None"))
+
+    def test_is_none_code_not_icao(self):
+        """_is_none_code returns False for valid ICAO codes."""
+        import runmap
+        self.assertFalse(runmap._is_none_code("CYYZ"))
+        self.assertFalse(runmap._is_none_code("KJFK"))
+
+    def test_is_none_code_not_empty(self):
+        """_is_none_code returns False for empty string."""
+        import runmap
+        self.assertFalse(runmap._is_none_code(""))
+
+    def test_validate_allows_none_in_airports(self):
+        """validate_config allows NONE in airports list."""
+        import runmap
+        valid_config = {
+            "airports": ["CYYZ", "NONE", "CYTZ"],
+            "home": "CYYZ",
+        }
+        # Should not raise
+        runmap.validate_config(valid_config)
+
+    def test_validate_allows_none_in_led_cycle(self):
+        """validate_config allows NONE in led_cycle."""
+        import runmap
+        valid_config = {
+            "airports": ["CYYZ", "CYTZ"],
+            "led_cycle": ["CYYZ", "NONE", "CYTZ", ""],
+        }
+        # Should not raise
+        runmap.validate_config(valid_config)
+
+    def test_parse_metar_skips_none(self):
+        """parse_metar_statuses skips NONE entries."""
+        import runmap
+        reports = [
+            {"icaoId": "CYYZ", "clouds": [{"cover": "SCT", "base": 5000}]},
+            {"icaoId": "NONE", "clouds": [{"cover": "OVC", "base": 200}]},
+        ]
+        cats = runmap.parse_metar_statuses(reports, ["CYYZ", "NONE"])
+        self.assertEqual(cats["CYYZ"], "VFR")
+        self.assertEqual(cats["NONE"], "UNK")
+
+    def test_led_update_turns_off_none(self):
+        """led_update turns off LEDs with NONE code."""
+        import runmap
+        from unittest.mock import MagicMock
+        strip = MagicMock()
+        cats = {"CYYZ": "VFR", "NONE": "UNK"}
+        runmap.led_update(strip, ["CYYZ", "NONE", "CYTZ"], cats)
+        strip.setPixelColor.assert_any_call(0, runmap.Color(0, 140, 0))  # VFR = green
+        strip.setPixelColor.assert_any_call(1, runmap.Color(0, 0, 0))  # NONE = off
+        strip.setPixelColor.assert_any_call(2, runmap.Color(100, 100, 100))  # UNK = grey
+
+
 if __name__ == "__main__":
     unittest.main()

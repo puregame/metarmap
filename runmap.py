@@ -177,6 +177,10 @@ def _is_valid_icao(code: str) -> bool:
     return isinstance(code, str) and bool(_ICAO_RE.match(code))
 
 
+def _is_none_code(code: str) -> bool:
+    return isinstance(code, str) and code.upper() == "NONE"
+
+
 def validate_config(data: dict) -> None:
     errors: List[str] = []
 
@@ -187,14 +191,14 @@ def validate_config(data: dict) -> None:
         if len(airports) == 0:
             errors.append("'airports' must contain at least one airport")
         for i, ap in enumerate(airports):
-            if not _is_valid_icao(ap):
-                errors.append(f"'airports[{i}]' is '{ap}', expected a valid 4-character ICAO code (e.g. CYYZ)")
+            if not _is_valid_icao(ap) and not _is_none_code(ap):
+                errors.append(f"'airports[{i}]' is '{ap}', expected a valid 4-character ICAO code (e.g. CYYZ) or 'NONE'")
 
     home = data.get("home")
     if home:
-        if not _is_valid_icao(home):
-            errors.append(f"'home' is '{home}', expected a valid 4-character ICAO code")
-        elif isinstance(airports, list) and home not in airports:
+        if not _is_valid_icao(home) and not _is_none_code(home):
+            errors.append(f"'home' is '{home}', expected a valid 4-character ICAO code or 'NONE'")
+        elif isinstance(airports, list) and home and home.upper() != "NONE" and home not in airports:
             errors.append(f"'home' ({home}) not found in airports list")
 
     colors = data.get("colors")
@@ -234,8 +238,8 @@ def validate_config(data: dict) -> None:
             errors.append("'led_cycle' must be a list")
         else:
             for i, entry in enumerate(led_cycle):
-                if entry != "" and not _is_valid_icao(entry):
-                    errors.append(f"'led_cycle[{i}]' is '{entry}', expected empty string or valid 4-character ICAO code")
+                if entry != "" and not _is_valid_icao(entry) and not _is_none_code(entry):
+                    errors.append(f"'led_cycle[{i}]' is '{entry}', expected empty string, 'NONE', or valid 4-character ICAO code")
 
     if errors:
         formatted = "\n".join(f"  - {e}" for e in errors)
@@ -418,6 +422,8 @@ def parse_metar_statuses(reports: List[dict], airports: List[str]) -> Dict[str, 
         if not icao:
             continue
         icao = icao.upper()
+        if _is_none_code(icao):
+            continue
         cat = ceiling_category(rpt.get("clouds", []))
         if icao in cats:
             cats[icao] = cat
@@ -434,7 +440,10 @@ def led_update(strip: PixelStrip, airports: List[str], cats: Dict[str, str], nig
     for i, icao in enumerate(airports):
         if i >= strip.numPixels():
             break
-        strip.setPixelColor(i, category_to_color(cats.get(icao, "UNK"), night_mode=night))
+        if _is_none_code(icao):
+            strip.setPixelColor(i, Color(0, 0, 0))
+        else:
+            strip.setPixelColor(i, category_to_color(cats.get(icao, "UNK"), night_mode=night))
         logger.info("%s > %s", icao, cats.get(icao, "UNK"))
     strip.show()
 
@@ -913,7 +922,7 @@ class WebHandler(BaseHTTPRequestHandler):
             if not isinstance(airport, str):
                 self.send_error(400, "airport must be a string")
                 return
-            if airport and not _is_valid_icao(airport):
+            if airport and not _is_valid_icao(airport) and not _is_none_code(airport):
                 self.send_error(400, f"Invalid ICAO code: {airport}")
                 return
             with led_cycle_lock:
@@ -1091,20 +1100,23 @@ def main():
 
             # Parse wind speed and direction from home airport METAR data
             home_metar = None
-            for m in metars:
-                if m.get('icaoId') == home:
-                    home_metar = m
-                    break
+            if home and not _is_none_code(home):
+                for m in metars:
+                    if m.get('icaoId') == home:
+                        home_metar = m
+                        break
             if home_metar is None:
-                logger.warning("No METAR found for home airport %s, falling back to first METAR", home)
-                home_metar = metars[0]
-            wind_speed = home_metar.get('windSpeed')
-            wind_direction = home_metar.get('windDirection')
-            status_display['home_wind_text'] = parse_wind_speed_direction(wind_speed, wind_direction)
-            status_display['home_airport'] = home
-            status_display['home_ceiling'] = get_ceiling_text(home_metar.get('clouds', []))
-            status_display['home_visibility'] = get_visibility_text(home_metar.get('visibility'))
-            logger.info("Home airport=%s Wind: direction=%s, speed=%s", home, wind_direction, wind_speed)
+                if home and not _is_none_code(home):
+                    logger.warning("No METAR found for home airport %s, falling back to first METAR", home)
+                home_metar = metars[0] if metars else None
+            if home_metar:
+                wind_speed = home_metar.get('windSpeed')
+                wind_direction = home_metar.get('windDirection')
+                status_display['home_wind_text'] = parse_wind_speed_direction(wind_speed, wind_direction)
+                status_display['home_airport'] = home
+                status_display['home_ceiling'] = get_ceiling_text(home_metar.get('clouds', []))
+                status_display['home_visibility'] = get_visibility_text(home_metar.get('visibility'))
+                logger.info("Home airport=%s Wind: direction=%s, speed=%s", home, wind_direction, wind_speed)
 
             cats = parse_metar_statuses(metars, airports)
 
@@ -1114,11 +1126,11 @@ def main():
                 cats_for_display = {}
                 display_airports = []
                 for icao in led_cycle_map:
-                    if icao:  # skip empty strings (LED stays off)
+                    if icao and not _is_none_code(icao):
                         cats_for_display[icao] = cats.get(icao, "UNK")
                         display_airports.append(icao)
                     else:
-                        display_airports.append("")  # empty string = LED off
+                        display_airports.append("")  # empty string or NONE = LED off
                 led_update(strip, display_airports, cats_for_display, night=get_is_night(home_location))
             else:
                 led_update(strip, airports, cats, night=get_is_night(home_location))
