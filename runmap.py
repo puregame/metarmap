@@ -117,7 +117,9 @@ def main() -> None:
     try:
         while True:
             airports = state.current_airports  # picks up any saves from the web UI
-            logger.info("Night Mode: %s", get_is_night(home_location))
+            night = get_is_night(home_location)
+            state.is_night = night  # update regardless of METAR fetch success
+            logger.info("Night Mode: %s", night)
             metars = _fetch_metars_with_retry(airports, strip, oled)
             if metars is None:
                 continue
@@ -129,11 +131,9 @@ def main() -> None:
             _update_home_metar(metars, home)
 
             cats = parse_metar_statuses(metars, airports)
-            night = get_is_night(home_location)
             led_update(strip, airports, cats, night=night)
 
             state.categories = cats
-            state.is_night = night
             state.status_display["time"] = datetime.now()
             state.status_display["ip_address"], state.status_display["rssi"] = get_wifi_status()
             state.status_display["cycle_time"] = time.time()

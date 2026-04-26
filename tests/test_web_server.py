@@ -276,7 +276,27 @@ class TestHandleSaveConfig(unittest.TestCase):
         written = json.loads(mock_path.write_text.call_args[0][0])
         self.assertEqual(written["home"], "CYYZ")
         self.assertEqual(written["num_leds"], 50)
+        # Array is padded to num_leds (50) with NONE entries
+        self.assertEqual(written["airports"][:2], ["CYYZ", "KJFK"])
+        self.assertEqual(len(written["airports"]), 50)
+        self.assertTrue(all(a == "NONE" for a in written["airports"][2:]))
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_trims_airports_to_num_leds(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": []})
+        airports = ["CYYZ", "KJFK", "EGLL", "YSSY"]
+        body = json.dumps({"airports": airports, "num_leds": 2}).encode()
+        handle_save_config(body)
+        written = json.loads(mock_path.write_text.call_args[0][0])
         self.assertEqual(written["airports"], ["CYYZ", "KJFK"])
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_pads_airports_to_num_leds(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": []})
+        body = json.dumps({"airports": ["CYYZ"], "num_leds": 4}).encode()
+        handle_save_config(body)
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertEqual(written["airports"], ["CYYZ", "NONE", "NONE", "NONE"])
 
     @patch("web_server.AIRPORT_FILE")
     def test_saves_home_airport(self, mock_path):

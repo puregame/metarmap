@@ -135,6 +135,13 @@ def handle_save_config(body: bytes) -> dict:
         config_data = {}
 
     # Apply only the fields explicitly included in the request
+    # Trim or pad airports to match num_leds if both are present
+    target_len = data.get("num_leds") or config_data.get("num_leds")
+    if isinstance(target_len, int) and target_len > 0:
+        if len(airports) > target_len:
+            airports = airports[:target_len]
+        while len(airports) < target_len:
+            airports.append("NONE")
     config_data["airports"] = airports
 
     if "home" in data:

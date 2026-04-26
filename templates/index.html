@@ -122,6 +122,15 @@ tbody tr:hover { background: #161b22; }
 <!-- ── Config tab ── -->
 <div id="tab-config" class="tab">
 
+  <!-- Toolbar (top) -->
+  <div class="toolbar" style="margin-top:0;margin-bottom:14px">
+    <button class="btn btn-danger" onclick="clearLEDs(this)"
+            title="Turn off every LED on the strip immediately">Clear LEDs</button>
+    <button class="btn btn-save"   onclick="saveConfig(this)"
+            title="Save all settings and the airport list to disk">Save All Config</button>
+  </div>
+  <div id="config-msg"></div>
+
   <!-- Settings panel -->
   <div class="card">
     <div class="settings-grid">
@@ -131,7 +140,8 @@ tbody tr:hover { background: #161b22; }
 
       <label>Number of LEDs</label>
       <div>
-        <input id="cfg-num-leds" class="text-input" type="number" min="1" max="2000" placeholder="100">
+        <input id="cfg-num-leds" class="text-input" type="number" min="1" max="2000" placeholder="100"
+               onchange="resizeTable(this.value)">
         <span class="hint">takes effect on restart</span>
       </div>
 
@@ -189,17 +199,8 @@ tbody tr:hover { background: #161b22; }
     </div>
   </div>
 
-  <!-- Toolbar -->
-  <h3 style="margin-bottom:8px">LED → Airport Assignment</h3>
-  <div class="toolbar" style="margin-top:0">
-    <button class="btn btn-danger" onclick="clearLEDs(this)"
-            title="Turn off every LED on the strip immediately">Clear LEDs</button>
-    <button class="btn btn-save"   onclick="saveConfig(this)"
-            title="Save all settings and the airport list to disk">Save Airports List</button>
-  </div>
-  <div id="config-msg"></div>
-
   <!-- LED assignment table -->
+  <h3 style="margin-bottom:8px">LED → Airport Assignment</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>LED</th><th>Airport</th><th></th></tr></thead>
@@ -380,7 +381,11 @@ function loadConfig() {
       document.getElementById('cfg-num-leds').value = cfg.num_leds || '';
       document.getElementById('cfg-timezone').value = cfg.timezone || '';
       buildColorPickers(cfg.colors, cfg.dim_colors);
-      buildTable(cfg.airports || [], cfg.num_leds || 100);
+      var airports = cfg.airports || [];
+      var ledCount = cfg.num_leds || 100;
+      while (airports.length < ledCount) airports.push('NONE');
+      if (airports.length > ledCount) airports = airports.slice(0, ledCount);
+      buildTable(airports, ledCount);
       _configLoaded = true;
     });
 }
@@ -418,8 +423,19 @@ function collectColors(prefix) {
 }
 
 /* ── Config: LED table ── */
+function resizeTable(newCount) {
+  var n = parseInt(newCount, 10);
+  if (isNaN(n) || n < 1) return;
+  var inputs = document.querySelectorAll('.airport-input[data-idx]');
+  var current = [];
+  inputs.forEach(function(inp) { current.push(inp.value.trim().toUpperCase() || 'NONE'); });
+  while (current.length > n) current.pop();
+  while (current.length < n) current.push('NONE');
+  buildTable(current, n);
+}
+
 function buildTable(airports, ledCount) {
-  var total = Math.max(ledCount, airports.length);
+  var total = ledCount;  // exact count — caller is responsible for padding/trimming
   var rows = '';
   for (var i = 0; i < total; i++) {
     var code = airports[i] ? airports[i].toUpperCase() : 'NONE';
