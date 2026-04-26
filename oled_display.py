@@ -123,13 +123,13 @@ def update_display_normal(oled, display_data: dict) -> None:
             bar_count = 1
 
     bar_x = oled.width - 20
-    bar_y_base = 12
+    bar_y_base = 10
     bar_width = 2
     bar_spacing = 3
-    bar_max_height = 12
+    bar_max_height = 10
 
     for i in range(4):
-        bar_height = (i + 1) * 3
+        bar_height = (i + 1) * 2
         x = bar_x + i * bar_spacing
         y = bar_y_base - bar_height
         fill = 255 if i < bar_count else 0
@@ -168,8 +168,11 @@ def update_display_normal(oled, display_data: dict) -> None:
         top_text = top_texts[cycle_index % len(top_texts)]
 
     draw.text((0, 0), top_text, font=font_large, fill=255)
-    draw.text((0, 11), wx_text, font=font, fill=255)
-    draw.text((0, 22), now_text, font=font, fill=255)
+
+    bbox_now = draw.textbbox((0, 0), now_text, font=font)
+    now_width = bbox_now[2] - bbox_now[0]
+    draw.text((oled.width - now_width - 2, 12), now_text, font=font, fill=255)
+    draw.text((2, 12), wx_text, font=font, fill=255)
 
     oled.image(image)
     oled.show()
