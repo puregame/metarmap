@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>METAR Map</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #0d1117; color: #e0e0e0; padding: 20px; max-width: 860px; margin: 0 auto; }
+h1 { text-align: center; color: #00ff88; margin-bottom: 20px; font-size: 1.4em; letter-spacing: 1px; }
+
+/* Nav */
+.nav { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 24px; }
+.nav button { background: none; border: none; border-bottom: 2px solid transparent; color: #8b949e; cursor: pointer; font-family: monospace; font-size: 1em; padding: 8px 22px; margin-bottom: -1px; }
+.nav button:hover { color: #cdd9e5; }
+.nav button.active { color: #00ff88; border-bottom-color: #00ff88; }
+
+/* Tabs */
+.tab { display: none; }
+.tab.active { display: block; }
+
+/* Status */
+.status-card { background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 16px; }
+.status-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #21262d; }
+.status-row:last-child { border-bottom: none; }
+.status-label { color: #8b949e; }
+.status-value { color: #00ff88; }
+
+/* Toolbar */
+.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+
+/* Buttons */
+.btn { border: none; border-radius: 5px; cursor: pointer; font-family: monospace; font-size: 0.9em; padding: 8px 16px; transition: opacity 0.15s; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-save   { background: #238636; color: #fff; }
+.btn-save:not(:disabled):hover   { background: #2ea043; }
+.btn-danger { background: #b91c1c; color: #fff; }
+.btn-danger:not(:disabled):hover { background: #dc2626; }
+.btn-flash  { background: #1d4ed8; color: #fff; font-size: 0.82em; padding: 4px 10px; min-width: 58px; }
+.btn-flash:not(:disabled):hover  { background: #2563eb; }
+
+/* Message banner */
+.msg { border-radius: 5px; font-size: 0.88em; margin-bottom: 12px; padding: 8px 12px; }
+.msg-ok  { background: #0a2a14; border: 1px solid #238636; color: #3fb950; }
+.msg-err { background: #2a0a0a; border: 1px solid #b91c1c; color: #f85149; }
+
+/* LED table */
+.table-wrap { border: 1px solid #21262d; border-radius: 6px; max-height: 62vh; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th { background: #161b22; color: #58a6ff; font-size: 0.82em; letter-spacing: 0.5px; padding: 8px 14px; position: sticky; text-align: left; text-transform: uppercase; top: 0; border-bottom: 1px solid #30363d; }
+tbody td { border-bottom: 1px solid #21262d; padding: 5px 14px; vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: #161b22; }
+.led-num { color: #6e7681; font-size: 0.9em; width: 56px; }
+.airport-input { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e0e0e0; font-family: monospace; font-size: 0.95em; padding: 4px 8px; text-transform: uppercase; width: 84px; }
+.airport-input:focus { border-color: #58a6ff; outline: none; }
+.airport-input.none-val { color: #6e7681; }
+</style>
+</head>
+<body>
+<h1>METAR Map</h1>
+
+<nav class="nav">
+  <button class="active" onclick="showTab('home',this)">Home</button>
+  <button onclick="showTab('config',this)">Config</button>
+</nav>
+
+<!-- ── Home tab ── -->
+<div id="tab-home" class="tab active">
+  <div class="status-card" id="status"><p style="color:#6e7681">Loading…</p></div>
+</div>
+
+<!-- ── Config tab ── -->
+<div id="tab-config" class="tab">
+  <div class="toolbar">
+    <button class="btn btn-danger" onclick="clearLEDs(this)">Clear LEDs</button>
+    <button class="btn btn-save"   onclick="saveConfig(this)">Save</button>
+  </div>
+  <div id="config-msg"></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>LED</th><th>Airport</th><th></th></tr></thead>
+      <tbody id="led-tbody">
+        <tr><td colspan="3" style="color:#6e7681;padding:18px">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+var _configLoaded = false;
+
+/* ── Tab switching ── */
+function showTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav button').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'config' && !_configLoaded) loadConfig();
+}
+
+/* ── Home: status ── */
+function refreshStatus() {
+  fetch('/api/status')
+    .then(function(r) { return r.json(); })
+    .then(renderStatus)
+    .catch(function() {
+      document.getElementById('status').innerHTML = '<p style="color:#f85149">Error loading status</p>';
+    });
+}
+
+function renderStatus(d) {
+  function row(label, val) {
+    return '<div class="status-row"><span class="status-label">' + label + '</span>'
+         + '<span class="status-value">' + val + '</span></div>';
+  }
+  var html = '';
+  if (d.airports)   html += row('Airports',   d.airports.length + ' configured');
+  if (d.home)       html += row('Home',       d.home);
+  if (d.timezone)   html += row('Timezone',   d.timezone);
+  if (d.last_metar) html += row('Last METAR', d.last_metar);
+  if (d.ip_address) html += row('IP',         d.ip_address);
+  if (d.led_count)  html += row('LEDs',       d.led_count);
+  document.getElementById('status').innerHTML = html || '<p style="color:#6e7681">No data</p>';
+}
+
+refreshStatus();
+setInterval(refreshStatus, 60000);
+
+/* ── Config: load & build table ── */
+function loadConfig() {
+  fetch('/api/status')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      buildTable(d.airports || [], d.led_count || 0);
+      _configLoaded = true;
+    });
+}
+
+function buildTable(airports, ledCount) {
+  var total = Math.max(ledCount, airports.length);
+  var rows = '';
+  for (var i = 0; i < total; i++) {
+    var code = airports[i] ? airports[i].toUpperCase() : 'NONE';
+    var isNone = (code === 'NONE');
+    rows += '<tr>'
+      + '<td class="led-num">' + i + '</td>'
+      + '<td><input class="airport-input' + (isNone ? ' none-val' : '') + '" '
+      +   'data-idx="' + i + '" value="' + code + '" maxlength="4" spellcheck="false" '
+      +   'oninput="onAirportInput(this)"></td>'
+      + '<td><button class="btn btn-flash" onclick="flashLED(' + i + ',this)">Flash</button></td>'
+      + '</tr>';
+  }
+  document.getElementById('led-tbody').innerHTML = rows
+    || '<tr><td colspan="3" style="color:#6e7681">No LEDs configured</td></tr>';
+}
+
+function onAirportInput(inp) {
+  inp.value = inp.value.toUpperCase();
+  inp.classList.toggle('none-val', inp.value === 'NONE' || inp.value === '');
+}
+
+/* ── Config: flash / clear / save ── */
+function flashLED(index, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  fetch('/api/leds/' + index + '/flash', {method: 'POST'})
+    .finally(function() { btn.textContent = 'Flash'; btn.disabled = false; });
+}
+
+function clearLEDs(btn) {
+  btn.disabled = true;
+  fetch('/api/leds/clear', {method: 'POST'})
+    .finally(function() { btn.disabled = false; });
+}
+
+function saveConfig(btn) {
+  var inputs = document.querySelectorAll('.airport-input');
+  var airports = [];
+  inputs.forEach(function(inp) {
+    var v = inp.value.trim().toUpperCase();
+    airports.push(v || 'NONE');
+  });
+
+  btn.disabled = true;
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({airports: airports})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      showMsg('ok', 'Saved successfully.');
+      _configLoaded = false;  // refresh table on next visit
+    } else {
+      showMsg('err', d.error || 'Save failed.');
+    }
+  })
+  .catch(function() { showMsg('err', 'Network error.'); })
+  .finally(function() { btn.disabled = false; });
+}
+
+function showMsg(type, text) {
+  var el = document.getElementById('config-msg');
+  el.className = 'msg msg-' + type;
+  el.textContent = text;
+  setTimeout(function() { el.className = ''; el.textContent = ''; }, 5000);
+}
+</script>
+</body>
+</html>
