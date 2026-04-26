@@ -374,8 +374,11 @@ def get_metar_json(airports: List[str]) -> List[dict]:
         "format": "json",
         "taf": "false",
     }
+    logger.debug("METAR API request: %s params=%s", url, params)
     try:
         response = requests.get(url, params=params, timeout=15)
+        logger.debug("METAR API response status: %d", response.status_code)
+        logger.debug("METAR API response body (first 500 chars): %s", response.text[:500])
         response.raise_for_status()
         data = response.json()
         if isinstance(data, list):
@@ -384,6 +387,7 @@ def get_metar_json(airports: List[str]) -> List[dict]:
             reports = data["data"]
         else:
             reports = []
+        logger.debug("METAR API returned %d reports", len(reports))
         return reports
     except Exception as e:
         logger.error("METAR fetch error: %s", e)
