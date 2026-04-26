@@ -13,6 +13,7 @@ from web_server import (
     get_status_json,
     handle_clear_leds,
     handle_flash_led,
+    handle_get_config,
     handle_save_config,
     load_template,
     start_web_server,
@@ -84,6 +85,24 @@ class TestLoadTemplate(unittest.TestCase):
 
     def test_has_config_tab(self):
         self.assertIn("tab-config", load_template())
+
+
+# ── Get config ───────────────────────────────────────────────────────────────
+
+class TestHandleGetConfig(unittest.TestCase):
+    @patch("web_server.AIRPORT_FILE")
+    def test_returns_parsed_json(self, mock_path):
+        data = {"airports": ["CYYZ"], "home": "CYYZ", "num_leds": 50}
+        mock_path.read_text.return_value = json.dumps(data)
+        result = handle_get_config()
+        self.assertEqual(result["home"], "CYYZ")
+        self.assertEqual(result["num_leds"], 50)
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_returns_empty_dict_on_error(self, mock_path):
+        mock_path.read_text.side_effect = FileNotFoundError
+        result = handle_get_config()
+        self.assertEqual(result, {})
 
 
 # ── LED clear ─────────────────────────────────────────────────────────────────
@@ -185,6 +204,49 @@ class TestHandleSaveConfig(unittest.TestCase):
         self.assertEqual(written["home"], "CYYZ")
         self.assertEqual(written["num_leds"], 50)
         self.assertEqual(written["airports"], ["CYYZ", "KJFK"])
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_saves_home_airport(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ", "KJFK"]})
+        body = json.dumps({"airports": ["CYYZ", "KJFK"], "home": "KJFK"}).encode()
+        result = handle_save_config(body)
+        self.assertTrue(result.get("ok"))
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertEqual(written["home"], "KJFK")
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_saves_num_leds_and_updates_state(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ"]})
+        body = json.dumps({"airports": ["CYYZ"], "num_leds": 42}).encode()
+        handle_save_config(body)
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertEqual(written["num_leds"], 42)
+        self.assertEqual(state.LED_COUNT, 42)
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_saves_timezone_and_updates_state(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ"]})
+        body = json.dumps({"airports": ["CYYZ"], "timezone": "America/Vancouver"}).encode()
+        handle_save_config(body)
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertEqual(written["timezone"], "America/Vancouver")
+        self.assertEqual(state.status_display["timezone"], "America/Vancouver")
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_empty_timezone_removed_from_config(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ"], "timezone": "America/Toronto"})
+        body = json.dumps({"airports": ["CYYZ"], "timezone": ""}).encode()
+        handle_save_config(body)
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertNotIn("timezone", written)
+
+    @patch("web_server.AIRPORT_FILE")
+    def test_invalid_num_leds_ignored(self, mock_path):
+        mock_path.read_text.return_value = json.dumps({"airports": ["CYYZ"], "num_leds": 100})
+        body = json.dumps({"airports": ["CYYZ"], "num_leds": None}).encode()
+        handle_save_config(body)
+        written = json.loads(mock_path.write_text.call_args[0][0])
+        self.assertEqual(written["num_leds"], 100)  # unchanged
 
 
 # ── Server startup ────────────────────────────────────────────────────────────

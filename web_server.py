@@ -39,6 +39,15 @@ def get_status_json() -> dict:
     }
 
 
+def handle_get_config() -> dict:
+    """Return the raw contents of config.json."""
+    try:
+        return json.loads(AIRPORT_FILE.read_text())
+    except Exception as exc:
+        logger.error("Could not read config: %s", exc)
+        return {}
+
+
 def handle_clear_leds() -> dict:
     """Turn off every LED on the strip."""
     if state.strip is None:
@@ -65,7 +74,7 @@ def handle_flash_led(index: int) -> dict:
 
 
 def handle_save_config(body: bytes) -> dict:
-    """Validate and persist a new airports array; updates live state immediately."""
+    """Validate and persist settings; updates live state immediately."""
     try:
         data = json.loads(body)
     except (json.JSONDecodeError, ValueError):
@@ -75,12 +84,36 @@ def handle_save_config(body: bytes) -> dict:
     if not isinstance(airports, list):
         return {"error": "'airports' must be a list"}
 
-    # Merge with current on-disk config so we don't lose other settings
+    # Load existing config so unrelated fields are preserved
     try:
         config_data = json.loads(AIRPORT_FILE.read_text())
     except Exception:
         config_data = {}
+
+    # Apply only the fields explicitly included in the request
     config_data["airports"] = airports
+
+    if "home" in data:
+        home = (data["home"] or "").strip().upper()
+        config_data["home"] = home  # empty string is valid (clears home)
+    else:
+        home = config_data.get("home", "")
+
+    if "num_leds" in data:
+        num_leds = data["num_leds"]
+        if isinstance(num_leds, int) and num_leds > 0:
+            config_data["num_leds"] = num_leds
+    else:
+        num_leds = None
+
+    if "timezone" in data:
+        timezone = (data["timezone"] or "").strip()
+        if timezone:
+            config_data["timezone"] = timezone
+        else:
+            config_data.pop("timezone", None)
+    else:
+        timezone = None
 
     try:
         validate_config(config_data)
@@ -88,8 +121,15 @@ def handle_save_config(body: bytes) -> dict:
         return {"error": str(exc)}
 
     AIRPORT_FILE.write_text(json.dumps(config_data, indent=2))
+
+    # Hot-update runtime state where safe to do so
     state.current_airports = airports
-    logger.info("Config saved via web UI: %d airports", len(airports))
+    if num_leds is not None and isinstance(num_leds, int) and num_leds > 0:
+        state.LED_COUNT = num_leds
+    if timezone is not None:
+        state.status_display["timezone"] = timezone or None
+
+    logger.info("Config saved via web UI — %d airports, home=%s", len(airports), home or "unset")
     return {"ok": True}
 
 
@@ -104,6 +144,8 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_html(load_template())
         elif self.path == "/api/status":
             self.send_json(get_status_json())
+        elif self.path == "/api/config":
+            self.send_json(handle_get_config())
         else:
             self.send_error(404)
 

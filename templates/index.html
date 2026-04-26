@@ -20,14 +20,22 @@ h1 { text-align: center; color: #00ff88; margin-bottom: 20px; font-size: 1.4em; 
 .tab.active { display: block; }
 
 /* Status */
-.status-card { background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 16px; }
+.card { background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 16px; }
 .status-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #21262d; }
 .status-row:last-child { border-bottom: none; }
 .status-label { color: #8b949e; }
 .status-value { color: #00ff88; }
 
+/* Settings grid */
+.settings-grid { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; align-items: center; margin-bottom: 0; }
+.settings-grid label { color: #8b949e; font-size: 0.9em; white-space: nowrap; }
+.settings-grid .hint { color: #484f58; font-size: 0.78em; grid-column: 2; margin-top: -6px; }
+.text-input { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e0e0e0; font-family: monospace; font-size: 0.95em; padding: 5px 8px; width: 100%; }
+.text-input:focus { border-color: #58a6ff; outline: none; }
+input[type=number].text-input { width: 120px; }
+
 /* Toolbar */
-.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.toolbar { display: flex; gap: 10px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
 
 /* Buttons */
 .btn { border: none; border-radius: 5px; cursor: pointer; font-family: monospace; font-size: 0.9em; padding: 8px 16px; transition: opacity 0.15s; }
@@ -45,7 +53,7 @@ h1 { text-align: center; color: #00ff88; margin-bottom: 20px; font-size: 1.4em; 
 .msg-err { background: #2a0a0a; border: 1px solid #b91c1c; color: #f85149; }
 
 /* LED table */
-.table-wrap { border: 1px solid #21262d; border-radius: 6px; max-height: 62vh; overflow-y: auto; }
+.table-wrap { border: 1px solid #21262d; border-radius: 6px; max-height: 52vh; overflow-y: auto; }
 table { width: 100%; border-collapse: collapse; }
 thead th { background: #161b22; color: #58a6ff; font-size: 0.82em; letter-spacing: 0.5px; padding: 8px 14px; position: sticky; text-align: left; text-transform: uppercase; top: 0; border-bottom: 1px solid #30363d; }
 tbody td { border-bottom: 1px solid #21262d; padding: 5px 14px; vertical-align: middle; }
@@ -67,16 +75,38 @@ tbody tr:hover { background: #161b22; }
 
 <!-- ── Home tab ── -->
 <div id="tab-home" class="tab active">
-  <div class="status-card" id="status"><p style="color:#6e7681">Loading…</p></div>
+  <div class="card" id="status"><p style="color:#6e7681">Loading…</p></div>
 </div>
 
 <!-- ── Config tab ── -->
 <div id="tab-config" class="tab">
+
+  <!-- Settings panel -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="settings-grid">
+      <label>Home Airport</label>
+      <input id="cfg-home" class="text-input airport-input" maxlength="4" spellcheck="false"
+             oninput="this.value=this.value.toUpperCase()" placeholder="CYYZ">
+
+      <label>Number of LEDs</label>
+      <div>
+        <input id="cfg-num-leds" class="text-input" type="number" min="1" max="2000" placeholder="100">
+        <span class="hint">takes effect on restart</span>
+      </div>
+
+      <label>Timezone</label>
+      <input id="cfg-timezone" class="text-input" type="text" placeholder="America/Toronto (optional)">
+    </div>
+  </div>
+
+  <!-- Toolbar -->
   <div class="toolbar">
     <button class="btn btn-danger" onclick="clearLEDs(this)">Clear LEDs</button>
     <button class="btn btn-save"   onclick="saveConfig(this)">Save</button>
   </div>
   <div id="config-msg"></div>
+
+  <!-- LED assignment table -->
   <div class="table-wrap">
     <table>
       <thead><tr><th>LED</th><th>Airport</th><th></th></tr></thead>
@@ -85,6 +115,7 @@ tbody tr:hover { background: #161b22; }
       </tbody>
     </table>
   </div>
+
 </div>
 
 <script>
@@ -120,25 +151,39 @@ function renderStatus(d) {
   if (d.airports)   html += row('Airports',   d.airports.length + ' configured');
   if (d.home)       html += row('Home',       d.home);
   if (d.timezone)   html += row('Timezone',   d.timezone);
-  if (d.last_metar) html += row('Last METAR', d.last_metar);
+  if (d.last_metar) html += row('Last METAR', timeSince(d.last_metar));
   if (d.ip_address) html += row('IP',         d.ip_address);
   if (d.led_count)  html += row('LEDs',       d.led_count);
   document.getElementById('status').innerHTML = html || '<p style="color:#6e7681">No data</p>';
 }
 
+function timeSince(isoString) {
+  var then = new Date(isoString);
+  var secs = Math.floor((Date.now() - then.getTime()) / 1000);
+  if (secs < 0) return 'just now';
+  var m = Math.floor(secs / 60);
+  var s = secs % 60;
+  if (m === 0) return s + 's ago';
+  return m + 'm ' + s + 's ago';
+}
+
 refreshStatus();
 setInterval(refreshStatus, 60000);
 
-/* ── Config: load & build table ── */
+/* ── Config: load ── */
 function loadConfig() {
-  fetch('/api/status')
+  fetch('/api/config')
     .then(function(r) { return r.json(); })
-    .then(function(d) {
-      buildTable(d.airports || [], d.led_count || 0);
+    .then(function(cfg) {
+      document.getElementById('cfg-home').value     = cfg.home     || '';
+      document.getElementById('cfg-num-leds').value = cfg.num_leds || '';
+      document.getElementById('cfg-timezone').value = cfg.timezone || '';
+      buildTable(cfg.airports || [], cfg.num_leds || 100);
       _configLoaded = true;
     });
 }
 
+/* ── Config: LED table ── */
 function buildTable(airports, ledCount) {
   var total = Math.max(ledCount, airports.length);
   var rows = '';
@@ -162,7 +207,7 @@ function onAirportInput(inp) {
   inp.classList.toggle('none-val', inp.value === 'NONE' || inp.value === '');
 }
 
-/* ── Config: flash / clear / save ── */
+/* ── Config: actions ── */
 function flashLED(index, btn) {
   btn.disabled = true;
   btn.textContent = '…';
@@ -177,24 +222,32 @@ function clearLEDs(btn) {
 }
 
 function saveConfig(btn) {
-  var inputs = document.querySelectorAll('.airport-input');
   var airports = [];
-  inputs.forEach(function(inp) {
-    var v = inp.value.trim().toUpperCase();
-    airports.push(v || 'NONE');
+  document.querySelectorAll('.airport-input[data-idx]').forEach(function(inp) {
+    airports.push(inp.value.trim().toUpperCase() || 'NONE');
   });
+
+  var numLedsRaw = parseInt(document.getElementById('cfg-num-leds').value, 10);
+
+  var payload = {
+    airports: airports,
+    home:     document.getElementById('cfg-home').value.trim().toUpperCase(),
+    num_leds: isNaN(numLedsRaw) ? null : numLedsRaw,
+    timezone: document.getElementById('cfg-timezone').value.trim(),
+  };
 
   btn.disabled = true;
   fetch('/api/config', {
-    method: 'POST',
+    method:  'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({airports: airports})
+    body:    JSON.stringify(payload),
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
-      showMsg('ok', 'Saved successfully.');
-      _configLoaded = false;  // refresh table on next visit
+      showMsg('ok', 'Saved.');
+      _configLoaded = false;
+      loadConfig();        // rebuild table in case num_leds changed
     } else {
       showMsg('err', d.error || 'Save failed.');
     }
