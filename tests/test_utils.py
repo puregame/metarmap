@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils import (
     ceiling_category,
     get_ceiling_text,
+    get_hostname,
     get_visibility_text,
     is_wifi_connected,
     parse_wind_speed_direction,
@@ -162,6 +163,24 @@ class TestIsWifiConnected(unittest.TestCase):
     @patch("utils.subprocess.check_output", side_effect=Exception("no wifi"))
     def test_disconnected_exception(self, _):
         self.assertFalse(is_wifi_connected())
+
+
+class TestGetHostname(unittest.TestCase):
+    @patch("utils.subprocess.check_output", return_value=b"metarmap\n")
+    def test_normal_hostname(self, _):
+        self.assertEqual(get_hostname(), "metarmap")
+
+    @patch("utils.subprocess.check_output", return_value=b"metarmap")
+    def test_no_trailing_newline(self, _):
+        self.assertEqual(get_hostname(), "metarmap")
+
+    @patch("utils.subprocess.check_output", return_value=b"")
+    def test_empty_hostname_returns_unknown(self, _):
+        self.assertEqual(get_hostname(), "unknown")
+
+    @patch("utils.subprocess.check_output", side_effect=Exception("no hostname"))
+    def test_exception_returns_unknown(self, _):
+        self.assertEqual(get_hostname(), "unknown")
 
 
 if __name__ == "__main__":

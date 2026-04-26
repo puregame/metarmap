@@ -112,6 +112,15 @@ def is_wifi_connected() -> bool:
         return False
 
 
+def get_hostname() -> str:
+    """Return system hostname, 'unknown' on failure."""
+    try:
+        result = subprocess.check_output(["hostname"], stderr=subprocess.DEVNULL).decode().strip()
+        return result or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def wait_for_wifi(oled) -> None:
     while not is_wifi_connected():
         print("Waiting for WiFi...")

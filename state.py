@@ -33,6 +33,7 @@ COLOR_MAP_DIM: Dict[str, Tuple[int, int, int]] = {
 status_display: Dict = {
     "ip_address":       "Disconnected",
     "rssi":             None,
+    "hostname":         "unknown",
     "time":             datetime.now(),
     "last_metar":       None,
     "other_text":       None,

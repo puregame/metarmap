@@ -71,6 +71,25 @@ def get_is_night(location: LocationInfo) -> bool:
     return now < dawn or now > dusk
 
 
+def display_show_status(oled, display_data: dict) -> None:
+    """Render the system status screen: IP, hostname, WiFi RSSI."""
+    image = Image.new("1", (oled.width, oled.height))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
+
+    ip_text = str(display_data.get("ip_address", "Disconnected"))
+    hostname = str(display_data.get("hostname", "unknown"))
+    rssi = display_data.get("rssi")
+    wifi_text = f"WiFi: {rssi} dBm" if rssi is not None else "WiFi: --"
+
+    draw.text((0, 0), f"IP: {ip_text}", font=font, fill=255)
+    draw.text((0, 11), hostname, font=font, fill=255)
+    draw.text((0, 22), wifi_text, font=font, fill=255)
+
+    oled.image(image)
+    oled.show()
+
+
 def update_display_normal(oled, display_data: dict) -> None:
     """Render the main status screen: WiFi bars, METAR time, home airport info."""
     image = Image.new("1", (oled.width, oled.height))

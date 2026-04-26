@@ -35,6 +35,7 @@ from hardware import HARDWARE_AVAILABLE, Color, PixelStrip
 from config import load_config
 from utils import (
     get_ceiling_text,
+    get_hostname,
     get_visibility_text,
     get_wifi_status,
     parse_wind_speed_direction,
@@ -42,7 +43,7 @@ from utils import (
 )
 from metar_api import get_metar_json, home_airport_get_sun, parse_metar_statuses
 from led_control import category_to_color, led_clear, led_set_all, led_update
-from oled_display import cleanup, get_is_night, update_display_normal
+from oled_display import cleanup, display_show_status, get_is_night, update_display_normal
 from web_server import start_web_server
 from config import _is_none_code
 
@@ -65,6 +66,7 @@ LED_CHANNEL = 0
 
 OLED_WIDTH = 128
 OLED_HEIGHT = 32
+BUTTON_PIN = 23
 
 LOG_FILE = Path(__file__).with_name("metar_led.log")
 UPDATE_INTERVAL = 60  # seconds between METAR refreshes
@@ -78,6 +80,48 @@ for _h in (logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)):
     logger.addHandler(_h)
 logger.info("hardware available: %s", HARDWARE_AVAILABLE)
 logger.info("Simulation mode: %s", SIMULATION)
+
+# ─── Button / GPIO ────────────────────────────────────────────────────────────
+
+_gpio_available = False
+
+
+def _gpio_setup() -> None:
+    global _gpio_available
+    try:
+        import RPi.GPIO as _gpio  # type: ignore
+
+        _gpio.setwarnings(False)
+        _gpio.setmode(_gpio.BCM)
+        _gpio.setup(BUTTON_PIN, _gpio.IN, pull_up_down=_gpio.PUD_UP)
+        _gpio.add_event_detect(
+            BUTTON_PIN, _gpio.FALLING, callback=_button_callback, bouncetime=200
+        )
+        _gpio_available = True
+        logger.info("Button on GPIO %d enabled", BUTTON_PIN)
+    except ImportError:
+        logger.debug("RPi.GPIO not available — button disabled")
+        _gpio_available = False
+    except Exception as exc:
+        logger.warning("Button init failed (%s) — continuing without button", exc)
+        _gpio_available = False
+
+
+def _button_callback(channel):
+    """GPIO interrupt handler — just wakes the main loop."""
+    state.refresh_event.set()
+
+
+def _gpio_cleanup() -> None:
+    if _gpio_available:
+        try:
+            import RPi.GPIO as _gpio  # type: ignore
+
+            _gpio.remove_event_detect(BUTTON_PIN)
+            _gpio.cleanup(BUTTON_PIN)
+        except Exception:
+            pass
+        _gpio_available = False
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -95,12 +139,17 @@ def main() -> None:
     oled = adafruit_ssd1306.SSD1306_I2C(OLED_WIDTH, OLED_HEIGHT, board.I2C(), addr=0x3C)
     oled_font = ImageFont.load_default()
 
-    handler = partial(cleanup, oled, strip)
-    signal.signal(signal.SIGTERM, handler)
-    signal.signal(signal.SIGINT, handler)
+    def _signal_handler(signum, frame):
+        _gpio_cleanup()
+        cleanup(oled, strip)
+
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
 
     oled.fill(0)
     oled.show()
+
+    _gpio_setup()
 
     if args.test_displays:
         _run_display_test(strip, oled)
@@ -114,6 +163,9 @@ def main() -> None:
     wait_for_wifi(oled)
     home_location = home_airport_get_sun(home)
     state.home_location = home_location
+
+    state.status_display["hostname"] = get_hostname()
+    show_status = False
 
     try:
         while True:
@@ -150,7 +202,25 @@ def main() -> None:
             state.status_display["ip_address"], state.status_display["rssi"] = get_wifi_status()
             state.status_display["cycle_time"] = time.time()
             state.status_display["timezone"] = tz_str
-            update_display_normal(oled, state.status_display)
+
+            # Check button: if held, toggle screen and wait for release
+            if _gpio_available:
+                try:
+                    import RPi.GPIO as _gpio  # type: ignore
+
+                    if not _gpio.input(BUTTON_PIN):
+                        show_status = not show_status
+                        time.sleep(0.2)
+                        while not _gpio.input(BUTTON_PIN):
+                            time.sleep(0.05)
+                except Exception:
+                    pass
+
+            if show_status:
+                display_show_status(oled, state.status_display)
+            else:
+                update_display_normal(oled, state.status_display)
+
             state.refresh_event.wait(timeout=UPDATE_INTERVAL)
             state.refresh_event.clear()
 
@@ -161,6 +231,8 @@ def main() -> None:
         logger.exception("Unexpected error: %s", ee)
         led_clear(strip)
         _show_error_screen(oled, oled_font, ee)
+    finally:
+        _gpio_cleanup()
 
 
 def _fetch_metars_with_retry(airports, strip, oled):
