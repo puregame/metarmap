@@ -80,11 +80,25 @@ def display_show_status(oled, display_data: dict) -> None:
     ip_text = str(display_data.get("ip_address", "Disconnected"))
     hostname = str(display_data.get("hostname", "unknown"))
     rssi = display_data.get("rssi")
-    wifi_text = f"WiFi: {rssi} dBm" if rssi is not None else "WiFi: --"
 
-    draw.text((0, 0), f"IP: {ip_text}", font=font, fill=255)
-    draw.text((0, 11), hostname, font=font, fill=255)
-    draw.text((0, 22), wifi_text, font=font, fill=255)
+    # IP big and readable on top half
+    draw.text((0, 0), ip_text, font=font_large, fill=255)
+
+    # hostname + WiFi indicator on bottom half
+    if rssi is not None:
+        if rssi >= -60:
+            bars = "####"
+        elif rssi >= -70:
+            bars = "### "
+        elif rssi >= -80:
+            bars = "##  "
+        else:
+            bars = "#   "
+        wifi_text = f"{rssi}dBm {bars}"
+    else:
+        wifi_text = "No WiFi"
+
+    draw.text((0, 16), f"{hostname}  {wifi_text}", font=font, fill=255)
 
     oled.image(image)
     oled.show()
@@ -137,7 +151,6 @@ def update_display_normal(oled, display_data: dict) -> None:
 
     wx_text = f"WX: {wx_local.strftime('%H:%M') if wx_local else 'N/A'}"
     now_text = now_local.strftime("%H:%M") if now_local else "N/A"
-    wifi_text = str(display_data.get("ip_address", ""))
 
     cycle_time = display_data.get("cycle_time", 0)
     cycle_index = int(time.time()) % 12 // 3 if cycle_time else 0
@@ -157,10 +170,6 @@ def update_display_normal(oled, display_data: dict) -> None:
     draw.text((0, 0), top_text, font=font_large, fill=255)
     draw.text((0, 11), wx_text, font=font, fill=255)
     draw.text((0, 22), now_text, font=font, fill=255)
-
-    bbox = draw.textbbox((0, 0), wifi_text, font=font)
-    wifi_text_width = bbox[2] - bbox[0]
-    draw.text((oled.width - wifi_text_width, 22), wifi_text, font=font, fill=255)
 
     oled.image(image)
     oled.show()
