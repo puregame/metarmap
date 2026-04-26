@@ -368,8 +368,9 @@ def get_wifi_status() -> Tuple[str, Optional[int]]:
 
 def get_metar_json(airports: List[str]) -> List[dict]:
     url = "https://aviationweather.gov/api/data/metar"
+    valid_airports = [a for a in airports if a and not _is_none_code(a)]
     params = {
-        "ids": ",".join(airports),
+        "ids": ",".join(valid_airports),
         "format": "json",
         "taf": "false",
     }
