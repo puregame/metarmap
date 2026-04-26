@@ -302,11 +302,11 @@ def _update_home_metar(metars: list, home: str) -> None:
 
     if home_metar:
         state.status_display["home_wind_text"] = parse_wind_speed_direction(
-            home_metar.get("windSpeed"), home_metar.get("windDirection")
+            home_metar.get("wspd"), home_metar.get("wdir")
         )
         state.status_display["home_airport"] = home
         state.status_display["home_ceiling"] = get_ceiling_text(home_metar.get("clouds", []))
-        state.status_display["home_visibility"] = get_visibility_text(home_metar.get("visibility"))
+        state.status_display["home_visibility"] = get_visibility_text(home_metar.get("visib"))
         logger.info("Home airport=%s wind=%s", home, state.status_display["home_wind_text"])
 
 
