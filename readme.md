@@ -16,7 +16,7 @@ This project displays real-time METAR data (aviation weather reports) on a physi
 3. **Install LEDs** – Wire a WS2812 LED to each airport hole, keeping track of the LED order (important for configuration).
 4. **Prepare Software** – Follow the setup instructions below.
 5. **Connect Hardware** – Wire the LEDs and optional display to a Raspberry Pi.
-6. **Test Airport Order** – Use built-in tools to verify each LED location.
+6. **Test Airport Order** – Use the web UI's guided configure feature to map each LED to an airport.
 7. **Adjust Colors & Brightness** – Tune color and brightness as needed.
 8. **Mount and Display** – Install in a frame and mount on the wall.
 
@@ -80,7 +80,7 @@ sudo apt update
 sudo apt install git python3-pip libjpeg-dev zlib1g-dev libfreetype6-dev
 ```
 
-### 2. Clone the Rpository
+### 2. Clone the Repository
 Clone the repository into /root:
 ```bash
 cd /root
@@ -191,13 +191,113 @@ You can use the `serial_number` field to uniquely identify which config file bel
 ### Color Configuration
 
 - The software provides default color mappings for flight conditions (VFR, MVFR, IFR, etc.).
-- You can override these in the `config.json` file by defining a `color_map` and/or `dim_color_map`.
+- You can override these in the `config.json` file by defining a `colors` and/or `dim_colors` object.
 - Some LEDs (e.g., WS2810) may use GBR instead of RGB format — adjust the color order in the config if needed.
 
 ### Home Airport
 
-- The `home_airport` field is used to determine local day or night using sunrise/sunset times.
+- The `home` field is used to determine local day or night using sunrise/sunset times.
 - When it's night at the home airport, the `dim_colors` are used instead of the default colors to reduce brightness.
+
+### Timezone
+
+- The `timezone` field sets the local timezone for the OLED display and web UI.
+- Uses IANA timezone identifiers (e.g., `America/Toronto`, `America/Vancouver`, `Europe/London`).
+- Defaults to UTC if not specified or if the timezone is invalid.
+
+### LED Cycle (Optional)
+
+- The `led_cycle` array lets you map each LED position to any airport code.
+- If `led_cycle` is set, LEDs display weather for the airports specified in `led_cycle` instead of the `airports` list.
+- Leave an entry blank (`""`) to keep that LED off.
+- Maximum entries: `num_leds`. Extra entries beyond `num_leds` are ignored.
+- The web UI is the recommended way to configure this (see below).
+
+---
+
+## Web Interface
+
+Start the web server with the `--web` flag:
+
+```bash
+python3 runmap.py --web
+```
+
+Then open `http://<pi-ip>:8080` in a browser. The web UI provides:
+
+### Status Panel
+
+Displays current system information:
+- Number of airports configured
+- Home airport
+- Timezone
+- Last METAR report time
+- IP address
+- Total LED count
+
+### LED Cycle Configuration
+
+Each LED position maps to an airport code. Leave an entry blank to keep that LED off. Changes can be saved manually via the "Save LED Cycle" button, which persists the mapping to `config.json`.
+
+### Guided Configure (Recommended)
+
+The guided configure feature walks you through mapping each LED to an airport:
+
+1. Click **"Configure Airports"** at the top of the page
+2. The Pi will enter configure mode — the OLED display shows "CONFIGURE"
+3. The current LED flashes on the map, and the corresponding input field is highlighted and auto-focused
+4. Type the 4-character ICAO airport code (e.g., `CYYZ`) and press **Enter** or click **"Assign & Next"**
+5. The assignment is saved to `config.json` immediately — progress is preserved even if the Pi restarts
+6. Repeat for each LED until all 100 are assigned (or skip by leaving blank)
+7. Click **"Cancel Configuration"** at any time to exit (cancellation does not save partial assignments)
+
+When configure mode is active, the "Save LED Cycle" button is disabled to prevent conflicts.
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Web UI (HTML page) |
+| GET | `/api/status` | System status JSON |
+| GET | `/api/led_cycle` | Current LED cycle mapping |
+| POST | `/api/led_cycle` | Save full LED cycle mapping |
+| GET | `/api/configure` | Check configure mode status |
+| POST | `/api/configure/start` | Enter configure mode |
+| POST | `/api/configure/stop` | Exit configure mode |
+| POST | `/api/configure/assign` | Assign airport to current LED |
+
+#### API Response Examples
+
+**GET /api/status**
+```json
+{
+  "airports": ["CYYZ", "CYTZ", "CYOW"],
+  "home": "CYYZ",
+  "timezone": "America/Toronto",
+  "last_metar": "2025-01-15T14:30:00+00:00",
+  "ip_address": "192.168.1.100",
+  "led_count": 100,
+  "led_cycle": []
+}
+```
+
+**GET /api/led_cycle**
+```json
+{
+  "led_cycle": ["CYYZ", "CYTZ", "", "CYOW"],
+  "led_count": 100,
+  "configure_active": false
+}
+```
+
+**POST /api/configure/assign**
+```json
+// Request body
+{"index": 0, "airport": "CYYZ"}
+
+// Response
+{"status": "ok"}
+```
 
 ---
 
@@ -206,18 +306,6 @@ For optional arguments list
 ```bash
 python3 runmap.py --help
 ```
-
-### Check LED–Airport Mappings
-After assembling the map, verify the LED-to-airport order using:
-
-```bash
-python3 runmap.py --cycle_airports
-```
-
-This command:
-- Lights one LED at a time in red.
-- Displays the LED index and corresponding airport ID on the screen.
-
 
 ### Test LED Intensity and Color Accuracy
 To test brightness and color mapping, run:
