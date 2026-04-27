@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/root/venv/bin/python /root/metarmap/runmap.py
+ExecStart=/root/venv/bin/python /root/metarmap/runmap.py --web
 WorkingDirectory=/root/metarmap
 StandardOutput=journal
 StandardError=journal
