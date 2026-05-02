@@ -16,7 +16,7 @@ This project displays real-time METAR data (aviation weather reports) on a physi
 3. **Install LEDs** – Wire a WS2812 LED to each airport hole, keeping track of the LED order (important for configuration).
 4. **Prepare Software** – Follow the setup instructions below.
 5. **Connect Hardware** – Wire the LEDs and optional display to a Raspberry Pi.
-6. **Test Airport Order** – Use built-in tools to verify each LED location.
+6. **Test Airport Order** – Use the web UI's guided configure feature to map each LED to an airport.
 7. **Adjust Colors & Brightness** – Tune color and brightness as needed.
 8. **Mount and Display** – Install in a frame and mount on the wall.
 
@@ -42,20 +42,28 @@ Note: See images/ directory for pictures of the assembly
 ---
 ## Hardware Wiring
 
-Refer to [pinout.xyz](https://pinout.xyz/) for Raspberry Pi GPIO details.
+The diagram below shows the complete wiring from the Raspberry Pi GPIO header to the OLED display and LED strip.
+
+| | |
+|---|---|
+| ![Wiring Diagram](images/wiring.wv.svg) | ![RPi Pinout](images/rpi-gpio.png) |
+| MetarMap Wiring Diagram | RPi 40-pin GPIO Pinout |
+
+For full GPIO pin details, refer to [pinout.xyz](https://pinout.xyz/).
+
+### Quick Reference
 
 | RPi Pin | Function         | Connects To                  |
 |---------|------------------|------------------------------|
 | 1       | 3.3V Power       | OLED Display VCC             |
-| 2       | 5V Power         | LED Power                    |
 | 3       | I2C SDA          | OLED SDA                     |
-| 4       | 5V Power         | From 5V USB Power Supply     |
+| 4       | 5V Power         | LED Strip 5V                 |
 | 5       | I2C SCL          | OLED SCL                     |
-| 6       | GND              | Power Supply Ground          |
-| 8       | UART TX          | Optional Debug Console       |
-| 10      | UART RX          | Optional Debug Console       |
-| 12      | GPIO - LED Data  | LED Data Line                |
-| 14      | GND              | LED Ground                   |
+| 6       | GND              | OLED GND                     |
+| 12      | GPIO18           | LED Strip DATA               |
+| 14      | GND              | LED Strip GND                |
+| 16      | GPIO23           | Button (pull-up)             |
+| 20      | GND              | Button                       |
 
 <img src="images/pi-wiring-setup.jpg" alt="Wiring Setup" width="400"/>
 
@@ -72,7 +80,7 @@ Refer to [pinout.xyz](https://pinout.xyz/) for Raspberry Pi GPIO details.
 > ```
 
 ### 1. Prepare Raspberry Pi  
-Ensure the Pi is connected to Wi-Fi. `nmcli` is recommended over `wpa_supplicant` for easier setup.
+Ensure the Pi is connected to Wi-Fi. `nmcli` is recommended for easier setup (see [tutorial](https://www.jeffgeerling.com/blog/2023/nmcli-wifi-on-raspberry-pi-os-12-bookworm/)).
 
 Install required packages:
 ```bash
@@ -80,7 +88,7 @@ sudo apt update
 sudo apt install git python3-pip libjpeg-dev zlib1g-dev libfreetype6-dev
 ```
 
-### 2. Clone the Rpository
+### 2. Clone the Repository
 Clone the repository into /root:
 ```bash
 cd /root
@@ -178,9 +186,101 @@ NOTE: Ensure you `--assume-unchanged` the config.json file otherwise your settin
 
 ---
 
+## Wiring Diagram
+
+The wiring diagram is generated from [WireViz](https://github.com/wireviz/WireViz) using the source file `images/wiring.wv.yaml`.
+
+To regenerate the diagram:
+
+```bash
+pip install wireviz
+wireviz images/wiring.wv.yaml
+```
+
+This produces `images/wiring.svg` (vector) and `images/wiring.png` (raster) in the same directory.
+
+---
+
+## Web Interface
+
+If running manually: start the web server with the `--web` flag. (If running via service, this flag is included automatically)
+
+```bash
+python3 runmap.py --web
+```
+
+Then open `http://<pi-ip>:8080` in a browser. The web UI is the primary way to configure and monitor your MetarMap.
+
+### Status Panel
+
+Displays current system information:
+- Number of airports configured
+- Home airport
+- Timezone
+- Last METAR report time
+- IP address
+- Total LED count
+
+### LED Cycle Configuration
+
+Each LED position maps to an airport code. Leave an entry blank (or use `NONE`) to keep that LED off. Changes are saved via the **"Save All Config"** button, which persists the mapping to `config.json`. Each row also has a **Flash** button to identify the physical LED.
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Web UI (HTML page) |
+| GET | `/api/status` | System status JSON |
+| GET | `/api/config` | Current config.json contents |
+| GET | `/api/debug` | Night mode diagnostics |
+| GET | `/api/logs?lines=N` | Last N log lines |
+| POST | `/api/leds/clear` | Turn off all LEDs |
+| POST | `/api/leds/{n}/flash` | Flash LED n white 3 times |
+| POST | `/api/config` | Save config (POST JSON body) |
+| POST | `/api/refresh` | Force immediate METAR refresh |
+| POST | `/api/leds/test` | Test all day/night LED colors |
+
+#### API Response Examples
+
+**GET /api/status**
+```json
+{
+  "airports": ["CYYZ", "CYTZ", "CYOW"],
+  "home": "CYYZ",
+  "timezone": "America/Toronto",
+  "last_metar": "2025-01-15T14:30:00+00:00",
+  "ip_address": "192.168.1.100",
+  "led_count": 100,
+  "categories": {"CYYZ": "VFR", "CYTZ": "MVFR"},
+  "is_night": false,
+  "category_colors": {"VFR": "#008c00", ...},
+  "category_colors_dim": {"VFR": "#002d00", ...}
+}
+```
+
+**POST /api/config**
+```json
+// Request body
+{
+  "airports": ["CYYZ", "CYTZ", "NONE", "CYOW"],
+  "home": "CYYZ",
+  "num_leds": 100,
+  "timezone": "America/Toronto",
+  "colors": {"VFR": "#00ff00", "MVFR": "#0000ff", "IFR": "#ff0000", "LIFR": "#780050", "UNK": "#646464"},
+  "dim_colors": {"VFR": "#00ff00", "MVFR": "#0000ff", "IFR": "#ff0000", "LIFR": "#780050", "UNK": "#646464"}
+}
+
+// Response
+{"ok": true}
+```
+
+---
+
 ## Configuration
 
 Configuration is managed via a file called `config.json` in the project folder.  
+The web UI is the recommended way to configure your map — `config.json` is primarily for advanced users or as a backup.
+
 You can use the `serial_number` field to uniquely identify which config file belongs to which physical map.
 
 ### Airports
@@ -191,13 +291,19 @@ You can use the `serial_number` field to uniquely identify which config file bel
 ### Color Configuration
 
 - The software provides default color mappings for flight conditions (VFR, MVFR, IFR, etc.).
-- You can override these in the `config.json` file by defining a `color_map` and/or `dim_color_map`.
+- You can override these in the `config.json` file by defining a `colors` and/or `dim_colors` object.
 - Some LEDs (e.g., WS2810) may use GBR instead of RGB format — adjust the color order in the config if needed.
 
 ### Home Airport
 
-- The `home_airport` field is used to determine local day or night using sunrise/sunset times.
+- The `home` field is used to determine local day or night using sunrise/sunset times.
 - When it's night at the home airport, the `dim_colors` are used instead of the default colors to reduce brightness.
+
+### Timezone
+
+- The `timezone` field sets the local timezone for the OLED display and web UI.
+- Uses IANA timezone identifiers (e.g., `America/Toronto`, `America/Vancouver`, `Europe/London`).
+- Defaults to UTC if not specified or if the timezone is invalid.
 
 ---
 
@@ -206,18 +312,6 @@ For optional arguments list
 ```bash
 python3 runmap.py --help
 ```
-
-### Check LED–Airport Mappings
-After assembling the map, verify the LED-to-airport order using:
-
-```bash
-python3 runmap.py --cycle_airports
-```
-
-This command:
-- Lights one LED at a time in red.
-- Displays the LED index and corresponding airport ID on the screen.
-
 
 ### Test LED Intensity and Color Accuracy
 To test brightness and color mapping, run:

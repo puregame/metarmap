@@ -1,93 +1,62 @@
-"""LED METAR Map - v3.2 (ceiling-based category)
-================================================
-The AviationWeather.gov JSON feed no longer includes `flight_category`.
-This version derives VFR/MVFR/IFR/LIFR from the **cloud ceiling** in each
-METAR:
-
-* **Ceiling** = lowest `BKN` or `OVC` layer. If none, treat as clear.  
-* **Category rules**  (FAA/NOAA standard):
-  * VFR ≥ 3 000 ft
-  * MVFR 1000 - 2 999 ft
-  * IFR 500 - 999 ft
-  * LIFR < 500 ft
-
-Everything else in v3.0 (mock mode, `--dry-run`, logging, JSON airport
-list) remains unchanged.
+"""LED METAR Map - v5.0
+===========================================================================
+Derives VFR/MVFR/IFR/LIFR from cloud ceiling in each METAR report.
 
 Run examples
 ────────────
-```bash
-# Real LEDs on Pi
-sudo python3 led_metar_map.py
+    # Real LEDs on Pi
+    sudo python3 runmap.py
 
-# Laptop test
-python3 led_metar_map.py --dry-run
-```
+    # Laptop / dry-run simulation
+    python3 runmap.py --dry-run
+
+    # With web UI (http://<pi-ip>:8080)
+    python3 runmap.py --web
 """
 
 from __future__ import annotations
 
 import argparse
-import socket
 import json
 import logging
-import sys
-import subprocess
 import signal
-import re
+import sys
 import time
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from datetime import datetime, timedelta, timezone
 from functools import partial
+from pathlib import Path
 
-from datetime import datetime, timezone, timedelta
-
-import requests
-
-# ─────────── Imports for display ───────────
 import board
-from PIL import Image, ImageDraw, ImageFont
 import adafruit_ssd1306
+from PIL import ImageFont
 
-from astral.sun import sun
-from astral import LocationInfo
+import state
+from hardware import HARDWARE_AVAILABLE, Color, PixelStrip
+from config import load_config
+from utils import (
+    get_ceiling_text,
+    get_hostname,
+    get_visibility_text,
+    get_wifi_status,
+    parse_wind_speed_direction,
+    wait_for_wifi,
+)
+from metar_api import get_metar_json, home_airport_get_sun, parse_metar_statuses
+from led_control import category_to_color, led_clear, led_set_all, led_update
+from oled_display import cleanup, display_show_status, get_is_night, update_display_normal
+from web_server import start_web_server
+from config import _is_none_code
 
-# ─────────── Try importing real LED driver, else fall back to mock ───────────
-HARDWARE_AVAILABLE = False
-try:
-    from rpi_ws281x import PixelStrip, Color  # type: ignore
-    HARDWARE_AVAILABLE = True
-except (ModuleNotFoundError, RuntimeError):
-    class Color(tuple):
-        def __new__(cls, r: int, g: int, b: int):
-            return super().__new__(cls, (r, g, b))
-        def __repr__(self):
-            return f"Color(r={self[0]}, g={self[1]}, b={self[2]})"
-
-    class PixelStrip:  # mock
-        def __init__(self, num: int, *args, **kwargs):
-            self._num = num
-            self._pixels: List[Tuple[int, int, int]] = [(0, 0, 0)] * num
-        def numPixels(self):
-            return self._num
-        def setPixelColor(self, i: int, color: Color):
-            if 0 <= i < self._num:
-                self._pixels[i] = color
-        def show(self):
-            print("LEDs:", " ".join(f"{i}:{c}" for i, c in enumerate(self._pixels)))
-        def begin(self):
-            print("[MOCK] PixelStrip initialised with", self._num, "pixels")
-
-# ─────────── Cmd‑line args ──────────────────────────────────────────────────
+# ─── CLI args ────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="LED METAR Map")
-parser.add_argument("--dry-run", action="store_true", help="Force simulation mode even on non‑Pi")
-parser.add_argument("--test_displays", action="store_true", help="Output alternating colors on LEDs")
-parser.add_argument("--cycle_airports", action="store_true", help="Cycle airports one at a time, flash the LED and show code on OLED Display")
+parser.add_argument("--dry-run", action="store_true", help="Force simulation mode")
+parser.add_argument("--test_displays", action="store_true", help="Show test colour pattern")
+parser.add_argument("--web", action="store_true", help="Enable web server on port 8080")
 args = parser.parse_args()
+
 SIMULATION = args.dry_run or not HARDWARE_AVAILABLE
 
-# ───────────────────── LED Config ───────────────────────────────────────────────
-LED_COUNT = 100
+# ─── Hardware constants ───────────────────────────────────────────────────────
 LED_PIN = 18
 LED_FREQ_HZ = 800_000
 LED_DMA = 10
@@ -95,434 +64,280 @@ LED_BRIGHTNESS = 65
 LED_INVERT = False
 LED_CHANNEL = 0
 
-AIRPORT_FILE = Path(__file__).with_name("config.json")
-LOG_FILE = Path(__file__).with_name("metar_led.log")
-UPDATE_INTERVAL = 60 # refresh data every 60 seconds
-
-
-COLOR_MAP: Dict[str, Color] = { #NOTE: colors are in RGB  format!!
-    "VFR": Color(0, 140, 0),
-    "MVFR": Color(0, 0, 140),
-    "IFR": Color(140, 0, 0),
-    "LIFR": Color(120, 0, 80),
-    "UNK": Color(100, 100, 100),
-}
-
-COLOR_MAP_DIM: Dict[str, Color] = {
-    "VFR": Color(0, 45, 0),
-    "MVFR": Color(0, 0, 45),
-    "IFR": Color(45, 0, 0),
-    "LIFR": Color(64, 0, 64),
-    "UNK": Color(50, 50, 50),
-}
-
-# ───────────────────── Display Config ───────────────────────────────────────────────
 OLED_WIDTH = 128
 OLED_HEIGHT = 32
+BUTTON_PIN = 23
 
-# Load font for display
-font = ImageFont.load_default(size=11)
-font_large = ImageFont.load_default(size=16)
+LOG_FILE = Path(__file__).with_name("metar_led.log")
+UPDATE_INTERVAL = 60  # seconds between METAR refreshes
+DISPLAY_INTERVAL = 1  # seconds between OLED display updates
 
-
-# ───────────────────── Logger ───────────────────────────────────────────────
+# ─── Logging ─────────────────────────────────────────────────────────────────
 logger = logging.getLogger("metar_led")
 logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-for h in (logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)):
-    h.setFormatter(fmt)
-    logger.addHandler(h)
+_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+for _h in (logging.FileHandler(LOG_FILE), logging.StreamHandler(sys.stdout)):
+    _h.setFormatter(_fmt)
+    logger.addHandler(_h)
 logger.info("hardware available: %s", HARDWARE_AVAILABLE)
 logger.info("Simulation mode: %s", SIMULATION)
 
+# ─── Button / GPIO ────────────────────────────────────────────────────────────
 
-# ───────────────────── Global Vars ──────────────────────────────────────────────
-status_display = {'ip_address': 'Disconnected',
-                  'rssi': 'None',
-                  'time': datetime.now(),
-                  'last_metar': 'ERROR',
-                  'other_text': None}  # for display on OLED
+_gpio_available = False
 
-# ───────────────────── Helpers ──────────────────────────────────────────────
 
-def load_config() -> Tuple[List[str], str]:
+def _gpio_setup() -> None:
+    global _gpio_available
     try:
-        data = json.loads(AIRPORT_FILE.read_text())
-        airports = data.get("airports", [])
-        home = data.get('home', '')
-        if data.get("num_leds"):
-            # if led_count exists in config, use it 
-            global LED_COUNT
-            LED_COUNT = data["num_leds"]
-        if data.get("colors"):
-            # if colors exists in config, use them 
-            global COLOR_MAP
-            logger.debug(f"old colors: {COLOR_MAP}")
-            COLOR_MAP = {k: Color(*v) for k, v in data["colors"].items()}
-            logger.debug(f"Loading colors from config: {COLOR_MAP}")
-        if data.get("dim_colors"):
-            # if dim_colors exists in config, use them 
-            global COLOR_MAP_DIM
-            logger.debug(f"old dim colors: {COLOR_MAP_DIM}")
-            COLOR_MAP_DIM = {k: Color(*v) for k, v in data["dim_colors"].items()}
-            logger.debug(f"Loading dim colors from config: {COLOR_MAP_DIM}")
-        if not airports:
-            raise ValueError("No airports in JSON")
-        return airports, home
+        import RPi.GPIO as _gpio  # type: ignore
+
+        _gpio.setwarnings(False)
+        _gpio.setmode(_gpio.BCM)
+        _gpio.setup(BUTTON_PIN, _gpio.IN, pull_up_down=_gpio.PUD_UP)
+        _gpio.add_event_detect(
+            BUTTON_PIN, _gpio.FALLING, callback=_button_callback, bouncetime=200
+        )
+        _gpio_available = True
+        logger.info("Button on GPIO %d enabled", BUTTON_PIN)
+    except ImportError:
+        logger.debug("RPi.GPIO not available — button disabled")
+        _gpio_available = False
     except Exception as exc:
-        logger.exception("Problem loading %s: %s", AIRPORT_FILE, exc)
-        raise
+        logger.warning("Button init failed (%s) — continuing without button", exc)
+        _gpio_available = False
 
 
-def ceiling_category(clouds: List[dict]) -> str:
-    """Return flight‐rules category from cloud layers list."""
-    ceiling: Optional[int] = None  # feet
-    for layer in clouds:
-        cover = layer.get("cover")
-        base = layer.get("base")
-        if cover in ("BKN", "OVC") and isinstance(base, (int, float)):
-            ceiling = base if ceiling is None or base < ceiling else ceiling
-    if ceiling is None:
-        return "VFR"
-    if ceiling <= 500:
-        return "LIFR"
-    if ceiling <= 1000:
-        return "IFR"
-    if ceiling <= 3000:
-        return "MVFR"
-    return "VFR"
+def _button_callback(channel):
+    """GPIO interrupt handler — just wakes the main loop."""
+    state.refresh_event.set()
 
 
-def get_wifi_status() -> Tuple[str, Optional[int]]:
-    # Get IP address
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        ip = "Disconnected"
+def _gpio_cleanup() -> None:
+    if _gpio_available:
+        try:
+            import RPi.GPIO as _gpio  # type: ignore
 
-    # Get RSSI (signal strength)
-    rssi = None
-    try:
-        output = subprocess.check_output(["iwconfig"], stderr=subprocess.DEVNULL).decode()
-        match = re.search(r"Signal level=(-?\d+)\s*dBm", output)
-        if match:
-            rssi = int(match.group(1))
-    except Exception:
-        pass
-    return ip, rssi
+            _gpio.remove_event_detect(BUTTON_PIN)
+            _gpio.cleanup(BUTTON_PIN)
+        except Exception:
+            pass
+        _gpio_available = False
 
 
-def get_metar_json(airports: List[str]) -> List[dict]:
-    url = "https://aviationweather.gov/api/data/metar"
-    params = {
-        "ids": ",".join(airports),
-        "format": "json",
-        "taf": "false",
-    }
-    try:
-        response = requests.get(url, params=params, timeout=15)
-        # logger.info("Requested URL: %s", response.url)
-        # logger.info("HTTP Status: %s", response.status_code)
-        # logger.info("Response Content: %s", response.text[:500])  # truncate to avoid spam
-        response.raise_for_status()
-        data = response.json()
-        reports = data if isinstance(data, list) else data.get("data", [])
-        return reports
-    except Exception as e:
-        logger.error("METAR fetch error: %s", e)
-        return []
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
+def main() -> None:
+    airports, home, tz_str = load_config()
+    logger.info("Timezone: %s", tz_str or "UTC")
 
-def parse_metar_statuses(reports: List[dict], airports: List[str]) -> Dict[str, str]:
-    cats = {a: "UNK" for a in airports}
-    for rpt in reports:
-        icao = next((rpt.get(k) for k in ("icaoId", "station_id", "station", "icao", "id") if rpt.get(k)), None)
-        if not icao:
-            continue
-        icao = icao.upper()
-        cat = ceiling_category(rpt.get("clouds", []))
-        if icao in cats:
-            cats[icao] = cat
-    return cats
-
-
-def category_to_color(cat: str, night_mode = False) -> Color:
-    if night_mode:
-        return COLOR_MAP_DIM.get(cat, COLOR_MAP_DIM["UNK"])
-    return COLOR_MAP.get(cat, COLOR_MAP["UNK"])
-
-
-def led_update(strip: PixelStrip, airports: List[str], cats: Dict[str, str], night=False):
-    for i, icao in enumerate(airports):
-        if i >= strip.numPixels():
-            break
-        strip.setPixelColor(i, category_to_color(cats.get(icao, "UNK"), night_mode=night))
-        logger.info("%s > %s", icao, cats.get(icao, "UNK"))
-    strip.show()
-
-
-def led_clear(strip: PixelStrip):
-    for i in range(strip.numPixels()):
-        strip.setPixelColor(i, Color(0, 0, 0))
-    strip.show()
-
-
-def led_set_single(strip: PixelStrip, number: int, color:Color):
-    strip.setPixelColor(number, color)
-    strip.show()
-
-
-def led_set_all(strip: PixelStrip, color: Color):
-    for i in range(strip.numPixels()):
-        strip.setPixelColor(i, color)
-    strip.show()
-
-
-def update_display_normal(oled: adafruit_ssd1306.SSD1306_I2C, display_data: dict):
-    image = Image.new("1", (oled.width, oled.height))
-    draw = ImageDraw.Draw(image)
-    draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
-
-    # Extract RSSI
-    rssi = display_data.get("rssi")
-    bar_count = 0
-    if rssi is not None:
-        if rssi >= -60:
-            bar_count = 4
-        elif rssi >= -70:
-            bar_count = 3
-        elif rssi >= -80:
-            bar_count = 2
-        else:
-            bar_count = 1
-
-    # Bar dimensions and position
-    bar_x = oled.width - 20
-    bar_y_base = 12
-    bar_width = 2
-    bar_spacing = 3
-    bar_max_height = 12
-
-    # Draw WiFi bars
-    for i in range(4):
-        bar_height = (i + 1) * 3
-        x = bar_x + i * bar_spacing
-        y = bar_y_base - bar_height
-        fill = 255 if i < bar_count else 0
-        draw.rectangle([x, y, x + bar_width, bar_y_base], fill=fill)
-
-    # If RSSI is None, draw a diagonal line through bars
-    if rssi is None:
-        x1 = bar_x - 2
-        x2 = bar_x + (3 * bar_spacing) + bar_width + 2
-        y1 = bar_y_base
-        y2 = bar_y_base - bar_max_height
-        draw.line([x1, y1, x2, y2], fill=255, width=1)
-        draw.line([x1, y2, x2, y1], fill=255, width=1)
-
-    # Draw text
-    wx_time = display_data['last_metar'].astimezone(timezone.utc).strftime('%H:%M') if display_data['last_metar'] else 'N/A'
-    now_time = display_data['time'].astimezone(timezone.utc).strftime('%H:%M')
-
-    wx_text = f"WX: {wx_time}z"
-    now_text = f"{now_time}z"
-    # wifi_text = f"WiFi: {rssi if rssi is not None else 'N/A'}dB"
-    wifi_text = f"{display_data['ip_address']}"
-
-    # Draw WX time top left-justified
-    if display_data['other_text']:
-        draw.text((0, 0), display_data['other_text'], font=font_large, fill=255)
-    else:
-        draw.text((0, 0), wx_text, font=font_large, fill=255)
-
-    # Draw NOW time bottom left-justified
-    draw.text((0, 16), now_text, font=font_large, fill=255)
-
-    # Draw Wifi text and bottom-right justify it
-    bbox = draw.textbbox((0, 0), wifi_text, font=font)
-    wifi_text_width = bbox[2] - bbox[0]
-    draw.text((oled.width - wifi_text_width, 20), wifi_text, font=font, fill=255)
-
-    oled.image(image)
-    oled.show()
-
-
-def display_show_airport(oled: adafruit_ssd1306, airport:str):
-    image = Image.new("1", (oled.width, oled.height))
-    draw = ImageDraw.Draw(image)
-    draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
-    draw.text((0, 0), airport, font=font_large, fill=255)
-    oled.image(image)
-    oled.show()
-
-
-def cleanup(oled, strip, signum, frame):
-    logger.info("Turning off all LEDs and clearing OLED screen")
-    led_clear(strip)
-    oled.fill(0)
-    oled.show()
-    sys.exit(0)
-
-
-def home_airport_get_sun(airport:str) -> LocationInfo:
-    airport_data = get_metar_json([airport])[0]
-    print(airport_data)
-    # Create Astral Location
-    return LocationInfo(name=airport, region="Airport", timezone="UTC", latitude=airport_data['lat'], longitude=airport_data['lon']) 
-
-
-def get_is_night(location: LocationInfo) -> bool:
-    now = datetime.now(timezone.utc)
-    sun_times = sun(location.observer, date=now.date(), tzinfo=timezone.utc)
-    logger.debug(f"home dawn: {sun_times['dawn']}")
-    logger.debug(f"home dusk: {sun_times['dusk']}")
-    logger.debug(f"now: {now}")
-#    return now < sun_times["dawn"] or now > sun_times["dusk"]
-    # Handle edge case: dusk is technically on the next day
-    if sun_times['dusk'] < sun_times["dawn"]:
-        # in this case, night must be both after dusk and before dawn
-        return now < sun_times['dawn'] and now > sun_times['dusk']
-    else:
-        # Normal day: night is before dawn or after dusk
-        # in this case night is before dawn or after dusk
-        return now < sun_times["dawn"] or now > sun_times['dusk']
-
-
-def is_wifi_connected():
-    try:
-        # Check if IP address assigned (non-empty output means connected)
-        result = subprocess.check_output(["hostname", "-I"]).decode().strip()
-        return bool(result)
-    except Exception:
-        return False
-
-
-def wait_for_wifi(oled):
-    while not is_wifi_connected():
-        print("Waiting for WiFi...")
-        oled.fill(0)
-        oled.text("WiFi Connecting", 0, 0, 1)
-        oled.show()
-        time.sleep(10)
-
-
-# ───────────────────── Main ────────────────────────────────────────────────
-
-def main():
-    airports, home = load_config()
-
-    # Setup LED Strip and OLED Display
-    strip = PixelStrip(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
+    strip = PixelStrip(
+        state.LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
+    )
     strip.begin()
+    state.strip = strip  # expose to web server for LED control endpoints
 
     oled = adafruit_ssd1306.SSD1306_I2C(OLED_WIDTH, OLED_HEIGHT, board.I2C(), addr=0x3C)
-    font = ImageFont.load_default()
+    oled_font = ImageFont.load_default()
 
-    # Setup shutdown call to cleanup function that turns off LEDs and clears display.
-    handler = partial(cleanup, oled, strip)
-    signal.signal(signal.SIGTERM, handler)
-    signal.signal(signal.SIGINT, handler)
+    def _signal_handler(signum, frame):
+        _gpio_cleanup()
+        cleanup(oled, strip)
 
-    # Initial clear OLED Display
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+
     oled.fill(0)
     oled.show()
 
+    _gpio_setup()
+
     if args.test_displays:
-        strip.setPixelColor(0, COLOR_MAP['VFR'])
-        strip.setPixelColor(1, COLOR_MAP['MVFR'])
-        strip.setPixelColor(2, COLOR_MAP['IFR'])
-        strip.setPixelColor(3, COLOR_MAP['LIFR'])
-        strip.setPixelColor(4, COLOR_MAP['UNK'])
-        strip.setPixelColor(5, COLOR_MAP_DIM['VFR'])
-        strip.setPixelColor(6, COLOR_MAP_DIM['MVFR'])
-        strip.setPixelColor(7, COLOR_MAP_DIM['IFR'])
-        strip.setPixelColor(8, COLOR_MAP_DIM['LIFR'])
-        strip.setPixelColor(9, COLOR_MAP_DIM['UNK'])
-        strip.show()
-
-        status_test = {'ip_address': 'N/A',
-                       'rssi': None,
-                       'time': datetime.now(),
-                       'last_metar': None,
-                       'other_text': None}
-        
-        status_test['time'] = datetime.now()
-        status_test['ip_address'], status_test['rssi'] = get_wifi_status()
-        update_display_normal(oled, status_test)
+        _run_display_test(strip, oled)
         return
-
-    if args.cycle_airports:
-        while True:
-            for num, airport in enumerate(airports):
-                led_clear(strip)
-                led_set_single(strip, num, Color(140,0,0))
-                display_show_airport(oled, f"{num} - {airport}")
-                time.sleep(3)
 
     logger.info("Monitoring: %s", ", ".join(airports))
 
-    wait_for_wifi(oled)
+    if args.web:
+        start_web_server(8080)
 
-    # get home location so we can calculate night time 
+    wait_for_wifi(oled)
     home_location = home_airport_get_sun(home)
+    state.home_location = home_location
+
+    state.status_display["hostname"] = get_hostname()
+    state.status_display["timezone"] = tz_str
+    show_status = False
+    last_metar_fetch = 0.0
 
     try:
         while True:
-            logger.info(f"Night Mode: {'True' if get_is_night(home_location) else 'False'}")
-            metars = []
-            tries = 0
-            while metars == []:
-                print("getting metars")
-                metars = get_metar_json(airports)
-                tries = tries + 1
-                if tries > 5:
-                    
-                    if status_display['last_metar'] > datetime.now(timezone.utc) - timedelta(minutes=60):
-                        # if no metar recieved in 60 minutes, set all LEDs to unknown color, log a warning, and set the display to "NO CONNECTION"
-                        logger.error("No METARs received after 60 minutes, waiting for next update interval.")
-                        led_set_all(strip, category_to_color('UNK')) # category_to_color will return the unknown color with day/night mode
-                        status_display['other_text'] = "API ERROR"
-                        update_display_normal(oled, status_display)
+            now = time.time()
+            display_now = datetime.now()
 
-                    # if too many tries, wait for update interval and try again.
-                    time.sleep(UPDATE_INTERVAL)
-                    status_display['other_text'] = None # clear other text and hope we get a metar next time
+            # ── Display update (every 1 second) ────────────────────────────
+            state.status_display["time"] = display_now
+            state.status_display["cycle_time"] = now
+            state.status_display["ip_address"], state.status_display["rssi"] = get_wifi_status()
+
+            # Check button: if held, toggle screen and wait for release
+            if _gpio_available:
+                try:
+                    import RPi.GPIO as _gpio  # type: ignore
+
+                    if not _gpio.input(BUTTON_PIN):
+                        show_status = not show_status
+                        time.sleep(0.2)
+                        while not _gpio.input(BUTTON_PIN):
+                            time.sleep(0.05)
+                except Exception:
+                    pass
+
+            if show_status:
+                display_show_status(oled, state.status_display)
+            else:
+                update_display_normal(oled, state.status_display)
+
+            # ── METAR fetch + LED update (every 60 seconds) ────────────────
+            if now - last_metar_fetch >= UPDATE_INTERVAL:
+                last_metar_fetch = now
+
+                if state.strip_needs_reinit:
+                    logger.info("Reinitializing LED strip with %d pixels", state.LED_COUNT)
+                    led_clear(strip)
+                    strip = PixelStrip(
+                        state.LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
+                    )
+                    strip.begin()
+                    state.strip = strip
+                    state.strip_needs_reinit = False
+                    logger.info("LED strip reinitialized")
+
+                airports = state.current_airports  # picks up any saves from the web UI
+                night = get_is_night(home_location)
+                state.is_night = night  # update regardless of METAR fetch success
+                logger.info("Night Mode: %s", night)
+                metars = _fetch_metars_with_retry(airports, strip, oled)
+                if metars is None:
                     continue
 
-            with open('latest_metars.json', "w") as f:
-                json.dump(metars, f, indent=4)
+                with open("latest_metars.json", "w") as f:
+                    json.dump(metars, f, indent=4)
 
-            # Parse ISO 8601 format with Zulu time
-            report_time_str = metars[0]['reportTime']
-            if report_time_str.endswith('Z'):
-                report_time_str = report_time_str[:-1]  # Remove 'Z'
-            status_display['last_metar'] = datetime.fromisoformat(report_time_str).replace(tzinfo=timezone.utc)
+                _update_report_time(metars)
+                _update_home_metar(metars, home)
 
-            cats = parse_metar_statuses(metars, airports)
-            led_update(strip, airports, cats, night=get_is_night(home_location))
+                cats = parse_metar_statuses(metars, airports)
+                led_update(strip, airports, cats, night=night)
 
-            status_display['time'] = datetime.now()
-            status_display['ip_address'], status_display['rssi'] = get_wifi_status()
-            update_display_normal(oled, status_display)
-            time.sleep(UPDATE_INTERVAL)
+                state.categories = cats
+
+            state.refresh_event.wait(timeout=DISPLAY_INTERVAL)
+            state.refresh_event.clear()
+
     except KeyboardInterrupt:
-        logger.info("Shutting down, clearing LEDs and display…")
+        logger.info("Shutting down")
         cleanup(oled, strip)
-    except Exception as ee: # handle all other exceptions
-        logger.error("other error")
-        logger.exception(ee)
-        
+    except Exception as ee:
+        logger.exception("Unexpected error: %s", ee)
         led_clear(strip)
-        image = Image.new("1", (oled.width, oled.height))
-        draw = ImageDraw.Draw(image)
-        draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
-        draw.text((0, 0), f"ERROR", font=font_large, fill=255)
-        draw.text((0, 20), f"{type(ee).__name__}", font=font, fill=255)
-        oled.fill(0)
-        oled.show()
+        _show_error_screen(oled, oled_font, ee)
+    finally:
+        _gpio_cleanup()
+
+
+def _fetch_metars_with_retry(airports, strip, oled):
+    """Fetch METARs with exponential back-off. Returns None if all retries fail."""
+    metars = []
+    tries = 0
+    max_retries = 5
+    base_delay = 2
+
+    while not metars:
+        logger.debug("Fetching METARs")
+        metars = get_metar_json(airports)
+        tries += 1
+
+        if tries > max_retries:
+            last_metar = state.status_display.get("last_metar")
+            if last_metar and last_metar > datetime.now(timezone.utc) - timedelta(minutes=60):
+                logger.error("No METARs after %d retries", max_retries)
+                led_set_all(strip, category_to_color("UNK"))
+                state.status_display["other_text"] = "API ERROR"
+                update_display_normal(oled, state.status_display)
+
+            time.sleep(UPDATE_INTERVAL)
+            state.status_display["other_text"] = None
+            return None
+
+        if not metars:
+            delay = min(base_delay * (2 ** (tries - 1)), 30)
+            logger.info("METAR fetch failed, retrying in %ds (%d/%d)", delay, tries, max_retries)
+            time.sleep(delay)
+
+    return metars
+
+
+def _update_report_time(metars: list) -> None:
+    report_time_str = metars[0].get("reportTime")
+    if not report_time_str:
+        logger.warning("No reportTime in METAR data")
+        return
+    if report_time_str.endswith("Z"):
+        report_time_str = report_time_str[:-1]
+    state.status_display["last_metar"] = datetime.fromisoformat(report_time_str).replace(
+        tzinfo=timezone.utc
+    )
+
+
+def _update_home_metar(metars: list, home: str) -> None:
+    home_metar = None
+    if home and not _is_none_code(home):
+        home_metar = next((m for m in metars if m.get("icaoId") == home), None)
+        if home_metar is None:
+            logger.warning("No METAR for home airport %s, using first report", home)
+
+    if home_metar is None:
+        home_metar = metars[0] if metars else None
+
+    if home_metar:
+        state.status_display["home_wind_text"] = parse_wind_speed_direction(
+            home_metar.get("wspd"), home_metar.get("wdir")
+        )
+        state.status_display["home_airport"] = home
+        state.status_display["home_ceiling"] = get_ceiling_text(home_metar.get("clouds", []))
+        state.status_display["home_visibility"] = get_visibility_text(home_metar.get("visib"))
+        logger.info("Home airport=%s wind=%s", home, state.status_display["home_wind_text"])
+
+
+def _run_display_test(strip, oled) -> None:
+    for i, cat in enumerate(["VFR", "MVFR", "IFR", "LIFR", "UNK"]):
+        strip.setPixelColor(i, Color(*state.COLOR_MAP[cat]))
+        strip.setPixelColor(i + 5, Color(*state.COLOR_MAP_DIM[cat]))
+    strip.show()
+
+    test_data = {
+        "ip_address": "N/A",
+        "rssi": None,
+        "time": datetime.now(),
+        "last_metar": None,
+        "other_text": None,
+        "timezone": None,
+    }
+    test_data["ip_address"], test_data["rssi"] = get_wifi_status()
+    update_display_normal(oled, test_data)
+
+
+def _show_error_screen(oled, oled_font, exc: Exception) -> None:
+    from PIL import Image, ImageDraw, ImageFont as _ImageFont
+    image = Image.new("1", (OLED_WIDTH, OLED_HEIGHT))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, OLED_WIDTH, OLED_HEIGHT), outline=0, fill=0)
+    draw.text((0, 0), "ERROR", font=_ImageFont.load_default(size=16), fill=255)
+    draw.text((0, 20), type(exc).__name__, font=oled_font, fill=255)
+    oled.fill(0)
+    oled.show()
+
 
 if __name__ == "__main__":
     main()

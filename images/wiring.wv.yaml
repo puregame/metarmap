@@ -1,0 +1,107 @@
+metadata:
+  title: MetarMap Wiring Diagram
+  description: Wiring connections for MetarMap — Raspberry Pi GPIO to WS2812 LEDs and SSD1306 OLED display
+
+connectors:
+  RPi:
+    type: Header
+    subtype: male 40-pin
+    pinlabels:
+      - "3V3"    # 1
+      - "5V"     # 2
+      - "SDA1"   # 3
+      - "5V"     # 4
+      - "SCL1"   # 5
+      - "GND"    # 6
+      - "GPIO3"  # 7
+      - "TXD0"   # 8
+      - "GND"    # 9
+      - "RXD0"   # 10
+      - "GPIO8"  # 11
+      - "GPIO18" # 12
+      - "GPIO1"  # 13
+      - "GND"    # 14
+      - "GPIO0"  # 15
+      - "GPIO2"  # 16
+      - "3V3"    # 17
+      - "GPIO3"  # 18
+      - "GPIO4"  # 19
+      - "GND"    # 20
+      - "GPIO5"  # 21
+      - "GPIO6"  # 22
+      - "GPIO12" # 23
+      - "GPIO13" # 24
+      - "GND"    # 25
+      - "GPIO19" # 26
+      - "GPIO16" # 27
+      - "GPIO20" # 28
+      - "GPIO21" # 29
+      - "GND"    # 30
+      - "GPIO18" # 31
+      - "GPIO14" # 32
+      - "GND"    # 33
+      - "GPIO17" # 34
+      - "GPIO27" # 35
+      - "GND"    # 36
+      - "GPIO22" # 37
+      - "GPIO10" # 38
+      - "GND"    # 39
+      - "GPIO9"  # 40
+  OLED:
+    type: Molex Micro-Fit
+    subtype: female
+    pinlabels: [VCC, GND, SDA, SCL]
+
+  LED:
+    type: JST PH
+    subtype: 3-pin
+    pinlabels: [5V, GND, DATA]
+
+  BUTTON:
+    type: Tactile Switch
+    subtype: 2-pin
+    pinlabels: [GPIO23, GND]
+
+cables:
+  C_I2C:
+    wirecount: 4
+    gauge: 0.25 mm2
+    length: 0.2
+    colors: [RD, BK, OG, GN]
+    color_code: IEC
+    type: Ribbon cable
+
+  C_LED:
+    wirecount: 3
+    gauge: 0.5 mm2
+    length: 0.3
+    colors: [RD, BK, YE]
+    color_code: IEC
+    type: LED strip
+
+  C_BTN:
+    wirecount: 2
+    gauge: 0.25 mm2
+    length: 0.1
+    colors: [OG, BK]
+    color_code: IEC
+    type: Signal cable
+
+connections:
+  # I2C: RPi pins 1, 3, 5, 6 -> OLED
+  -
+    - RPi: [1, 3, 5, 6]
+    - C_I2C: [1, 2, 3, 4]
+    - OLED: [VCC, GND, SDA, SCL]
+
+  # LED: RPi pins 4, 12, 14 -> LED strip
+  -
+    - RPi: [4, 12, 14]
+    - C_LED: [1, 3, 2]
+    - LED: [5V, DATA, GND]
+
+  # Button: RPi GPIO23 (pin 16) -> GND (pin 20)
+  -
+    - RPi: [16, 20]
+    - C_BTN: [1, 2]
+    - BUTTON: [GPIO23, GND]
