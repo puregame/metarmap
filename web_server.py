@@ -141,6 +141,38 @@ def handle_refresh() -> dict:
     return {"ok": True}
 
 
+def handle_get_wifi() -> dict:
+    from utils import wifi_list_saved
+    return {"networks": wifi_list_saved()}
+
+
+def handle_add_wifi(body: bytes) -> dict:
+    try:
+        data = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        return {"error": "Invalid JSON"}
+    ssid = (data.get("ssid") or "").strip()
+    if not ssid:
+        return {"error": "ssid is required"}
+    password = (data.get("password") or "").strip()
+    from utils import wifi_add
+    err = wifi_add(ssid, password)
+    return {"error": err} if err else {"ok": True}
+
+
+def handle_delete_wifi(body: bytes) -> dict:
+    try:
+        data = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        return {"error": "Invalid JSON"}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return {"error": "name is required"}
+    from utils import wifi_delete
+    err = wifi_delete(name)
+    return {"error": err} if err else {"ok": True}
+
+
 def handle_get_logs(lines: int = 100) -> dict:
     """Return the last N lines of the log file."""
     try:
@@ -275,6 +307,8 @@ class WebHandler(BaseHTTPRequestHandler):
             qs = parse_qs(urlparse(self.path).query)
             lines = int(qs.get("lines", ["100"])[0])
             self.send_json(handle_get_logs(lines))
+        elif self.path == "/api/wifi":
+            self.send_json(handle_get_wifi())
         else:
             self.send_error(404)
 
@@ -290,6 +324,12 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_json(handle_refresh())
         elif self.path == "/api/leds/test":
             self.send_json(handle_test_colors())
+        elif self.path == "/api/wifi":
+            length = int(self.headers.get("Content-Length", 0))
+            self.send_json(handle_add_wifi(self.rfile.read(length)))
+        elif self.path == "/api/wifi/delete":
+            length = int(self.headers.get("Content-Length", 0))
+            self.send_json(handle_delete_wifi(self.rfile.read(length)))
         else:
             self.send_error(404)
 

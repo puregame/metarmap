@@ -128,3 +128,54 @@ def wait_for_wifi(oled) -> None:
         oled.text("WiFi Connecting", 0, 0, 1)
         oled.show()
         time.sleep(10)
+
+
+def wifi_list_saved() -> list:
+    """Return saved WiFi profiles from NetworkManager as [{name, active}]."""
+    try:
+        out = subprocess.check_output(
+            ["nmcli", "--escape", "no", "-t", "-f", "NAME,TYPE,ACTIVE", "connection", "show"],
+            stderr=subprocess.DEVNULL,
+        ).decode()
+    except Exception:
+        return []
+    results = []
+    for line in out.splitlines():
+        # rsplit from right so SSIDs containing ':' are handled correctly
+        parts = line.rsplit(":", 2)
+        if len(parts) == 3 and parts[1] == "802-11-wireless":
+            results.append({"name": parts[0], "active": parts[2].lower() == "yes"})
+    return results
+
+
+def wifi_add(ssid: str, password: str) -> Optional[str]:
+    """Save a WiFi profile via nmcli (does not force-connect). Returns error or None."""
+    cmd = [
+        "nmcli", "connection", "add",
+        "type", "wifi",
+        "con-name", ssid,
+        "ssid", ssid,
+    ]
+    if password:
+        cmd += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+    try:
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        return None
+    except subprocess.CalledProcessError as exc:
+        return exc.output.decode().strip()
+    except Exception as exc:
+        return str(exc)
+
+
+def wifi_delete(name: str) -> Optional[str]:
+    """Delete a saved WiFi profile by connection name. Returns error or None."""
+    try:
+        subprocess.check_output(
+            ["nmcli", "connection", "delete", name],
+            stderr=subprocess.STDOUT,
+        )
+        return None
+    except subprocess.CalledProcessError as exc:
+        return exc.output.decode().strip()
+    except Exception as exc:
+        return str(exc)

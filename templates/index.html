@@ -101,6 +101,7 @@ tbody tr:hover { background: #161b22; }
 <nav class="nav">
   <button class="active" onclick="showTab('home',this)">Home</button>
   <button onclick="showTab('config',this)">Config</button>
+  <button onclick="showTab('wifi',this)">WiFi</button>
   <button onclick="showTab('log',this)">Log</button>
 </nav>
 
@@ -212,6 +213,33 @@ tbody tr:hover { background: #161b22; }
 
 </div>
 
+<!-- ── WiFi tab ── -->
+<div id="tab-wifi" class="tab">
+
+  <div id="wifi-msg"></div>
+
+  <!-- Saved networks -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Saved Networks</h3>
+    <div id="wifi-list"><p style="color:#6e7681">Loading…</p></div>
+  </div>
+
+  <!-- Add network -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Add Network</h3>
+    <div class="settings-grid">
+      <label>SSID</label>
+      <input id="wifi-ssid" class="text-input" type="text" maxlength="64" spellcheck="false" placeholder="MyNetwork">
+      <label>Password</label>
+      <input id="wifi-password" class="text-input" type="password" maxlength="63" placeholder="leave blank for open networks">
+    </div>
+    <div class="toolbar" style="margin-bottom:0;margin-top:14px">
+      <button class="btn btn-save" onclick="addWifi(this)">Add Network</button>
+    </div>
+  </div>
+
+</div>
+
 <!-- ── Log tab ── -->
 <div id="tab-log" class="tab">
   <div class="card">
@@ -272,6 +300,7 @@ function showTab(name, btn) {
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
   if (name === 'config' && !_configLoaded) loadConfig();
+  if (name === 'wifi'   && !_wifiLoaded)   loadWifi();
   if (name === 'log'    && !_logLoaded)    refreshLogs(true);
 }
 
@@ -524,6 +553,90 @@ function showMsg(type, text) {
   el.className = 'msg msg-' + type;
   el.textContent = text;
   setTimeout(function() { el.className = ''; el.textContent = ''; }, 5000);
+}
+
+/* ── WiFi tab ── */
+var _wifiLoaded = false;
+
+function loadWifi() {
+  fetch('/api/wifi')
+    .then(function(r) { return r.json(); })
+    .then(function(d) { renderWifiList(d.networks || []); _wifiLoaded = true; })
+    .catch(function() { document.getElementById('wifi-list').innerHTML = '<p style="color:#f85149">Error loading networks</p>'; });
+}
+
+function renderWifiList(networks) {
+  if (!networks.length) {
+    document.getElementById('wifi-list').innerHTML = '<p style="color:#6e7681">No saved networks</p>';
+    return;
+  }
+  var html = '<table><thead><tr><th>SSID / Profile</th><th>Status</th><th></th></tr></thead><tbody>';
+  networks.forEach(function(n) {
+    var badge = n.active
+      ? '<span class="badge badge-day">connected</span>'
+      : '<span style="color:#6e7681;font-size:0.82em">saved</span>';
+    html += '<tr>'
+      + '<td style="padding:7px 14px;font-family:monospace">' + escHtml(n.name) + '</td>'
+      + '<td style="padding:7px 14px">' + badge + '</td>'
+      + '<td style="padding:7px 14px"><button class="btn btn-danger" style="font-size:0.82em;padding:4px 10px" '
+      +   'onclick="deleteWifi(' + JSON.stringify(n.name) + ',this)">Delete</button></td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('wifi-list').innerHTML = html;
+}
+
+function addWifi(btn) {
+  var ssid = document.getElementById('wifi-ssid').value.trim();
+  var password = document.getElementById('wifi-password').value;
+  if (!ssid) { showWifiMsg('err', 'SSID is required.'); return; }
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  fetch('/api/wifi', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ssid: ssid, password: password}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      showWifiMsg('ok', 'Network "' + ssid + '" saved.');
+      document.getElementById('wifi-ssid').value = '';
+      document.getElementById('wifi-password').value = '';
+      loadWifi();
+    } else {
+      showWifiMsg('err', d.error || 'Failed to add network.');
+    }
+  })
+  .catch(function() { showWifiMsg('err', 'Network error.'); })
+  .finally(function() { btn.disabled = false; btn.textContent = 'Add Network'; });
+}
+
+function deleteWifi(name, btn) {
+  if (!confirm('Delete saved network "' + name + '"?')) return;
+  btn.disabled = true;
+  fetch('/api/wifi/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: name}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) { showWifiMsg('ok', 'Deleted "' + name + '".'); loadWifi(); }
+    else       { showWifiMsg('err', d.error || 'Delete failed.'); btn.disabled = false; }
+  })
+  .catch(function() { showWifiMsg('err', 'Network error.'); btn.disabled = false; });
+}
+
+function showWifiMsg(type, text) {
+  var el = document.getElementById('wifi-msg');
+  el.className = 'msg msg-' + type;
+  el.textContent = text;
+  setTimeout(function() { el.className = ''; el.textContent = ''; }, 5000);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>
