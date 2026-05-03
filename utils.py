@@ -130,6 +130,47 @@ def wait_for_wifi(oled) -> None:
         time.sleep(10)
 
 
+AP_SSID = "MetarMap-Setup"
+AP_PASSWORD = "metarmap1"   # WPA min 8 chars
+AP_IP = "10.42.0.1"        # IP NM assigns the Pi in hotspot/shared mode
+
+
+def wifi_start_ap() -> Optional[str]:
+    """Bring up a NetworkManager hotspot AP. Returns error string or None."""
+    # Remove any stale profile before creating a fresh one
+    subprocess.run(
+        ["nmcli", "connection", "delete", "Hotspot"],
+        stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    )
+    try:
+        subprocess.check_output(
+            ["nmcli", "device", "wifi", "hotspot",
+             "ifname", "wlan0",
+             "ssid", AP_SSID,
+             "password", AP_PASSWORD],
+            stderr=subprocess.STDOUT,
+        )
+        return None
+    except subprocess.CalledProcessError as exc:
+        return exc.output.decode().strip()
+    except Exception as exc:
+        return str(exc)
+
+
+def wifi_stop_ap() -> Optional[str]:
+    """Delete the Hotspot profile; NM reconnects to a saved network automatically."""
+    try:
+        subprocess.check_output(
+            ["nmcli", "connection", "delete", "Hotspot"],
+            stderr=subprocess.STDOUT,
+        )
+        return None
+    except subprocess.CalledProcessError as exc:
+        return exc.output.decode().strip()
+    except Exception as exc:
+        return str(exc)
+
+
 def wifi_list_saved() -> list:
     """Return saved WiFi profiles from NetworkManager as [{name, active}]."""
     try:

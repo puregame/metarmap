@@ -34,16 +34,25 @@ import state
 from hardware import HARDWARE_AVAILABLE, Color, PixelStrip
 from config import load_config
 from utils import (
+    AP_IP,
+    AP_SSID,
     get_ceiling_text,
     get_hostname,
     get_visibility_text,
     get_wifi_status,
+    is_wifi_connected,
     parse_wind_speed_direction,
-    wait_for_wifi,
+    wifi_start_ap,
 )
 from metar_api import get_metar_json, home_airport_get_sun, parse_metar_statuses
 from led_control import category_to_color, led_clear, led_set_all, led_update
-from oled_display import cleanup, display_show_status, get_is_night, update_display_normal
+from oled_display import (
+    cleanup,
+    display_show_ap_mode,
+    display_show_status,
+    get_is_night,
+    update_display_normal,
+)
 from web_server import start_web_server
 from config import _is_none_code
 
@@ -69,8 +78,9 @@ OLED_HEIGHT = 32
 BUTTON_PIN = 23
 
 LOG_FILE = Path(__file__).with_name("metar_led.log")
-UPDATE_INTERVAL = 60  # seconds between METAR refreshes
-DISPLAY_INTERVAL = 1  # seconds between OLED display updates
+UPDATE_INTERVAL = 60    # seconds between METAR refreshes
+DISPLAY_INTERVAL = 1    # seconds between OLED display updates
+AP_FALLBACK_SECS = 180  # wait this long for WiFi before starting AP
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logger = logging.getLogger("metar_led")
@@ -161,7 +171,7 @@ def main() -> None:
     if args.web:
         start_web_server(8080)
 
-    wait_for_wifi(oled)
+    _wait_for_wifi_or_ap(oled)
     home_location = home_airport_get_sun(home)
     state.home_location = home_location
 
@@ -193,12 +203,19 @@ def main() -> None:
                 except Exception:
                     pass
 
-            if show_status:
+            if state.ap_mode:
+                display_show_ap_mode(oled, AP_SSID, AP_IP)
+            elif show_status:
                 display_show_status(oled, state.status_display)
             else:
                 update_display_normal(oled, state.status_display)
 
             # ── METAR fetch + LED update (every 60 seconds) ────────────────
+            if state.ap_mode:
+                state.refresh_event.wait(timeout=DISPLAY_INTERVAL)
+                state.refresh_event.clear()
+                continue
+
             if now - last_metar_fetch >= UPDATE_INTERVAL:
                 last_metar_fetch = now
 
@@ -244,6 +261,26 @@ def main() -> None:
         _show_error_screen(oled, oled_font, ee)
     finally:
         _gpio_cleanup()
+
+
+def _wait_for_wifi_or_ap(oled) -> None:
+    """Poll for WiFi up to AP_FALLBACK_SECS, then start a setup AP and return."""
+    deadline = time.time() + AP_FALLBACK_SECS
+    while not is_wifi_connected():
+        remaining = int(deadline - time.time())
+        if remaining <= 0:
+            logger.warning("No WiFi after %ds — starting AP '%s'", AP_FALLBACK_SECS, AP_SSID)
+            err = wifi_start_ap()
+            if err:
+                logger.error("AP start failed: %s", err)
+            else:
+                state.ap_mode = True
+                logger.info("AP mode active — join '%s' and browse to %s:8080", AP_SSID, AP_IP)
+            return
+        oled.fill(0)
+        oled.text(f"WiFi... {remaining}s", 0, 0, 1)
+        oled.show()
+        time.sleep(10)
 
 
 def _fetch_metars_with_retry(airports, strip, oled):

@@ -217,6 +217,10 @@ tbody tr:hover { background: #161b22; }
 <div id="tab-wifi" class="tab">
 
   <div id="wifi-msg"></div>
+  <div id="wifi-ap-banner" style="display:none;background:#2a1f00;border:1px solid #d97706;border-radius:5px;color:#fbbf24;font-size:0.9em;margin-bottom:14px;padding:10px 14px">
+    <strong>Setup Mode Active</strong> — The Pi is broadcasting <strong id="wifi-ap-ssid"></strong>.<br>
+    Add your home network below and the Pi will connect automatically.
+  </div>
 
   <!-- Saved networks -->
   <div class="card">
@@ -559,9 +563,20 @@ function showMsg(type, text) {
 var _wifiLoaded = false;
 
 function loadWifi() {
-  fetch('/api/wifi')
-    .then(function(r) { return r.json(); })
-    .then(function(d) { renderWifiList(d.networks || []); _wifiLoaded = true; })
+  Promise.all([fetch('/api/wifi'), fetch('/api/status')])
+    .then(function(rs) { return Promise.all(rs.map(function(r) { return r.json(); })); })
+    .then(function(ds) {
+      var wifi = ds[0], status = ds[1];
+      var banner = document.getElementById('wifi-ap-banner');
+      if (status.ap_mode) {
+        document.getElementById('wifi-ap-ssid').textContent = status.ap_mode_ssid || 'MetarMap-Setup';
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+      renderWifiList(wifi.networks || []);
+      _wifiLoaded = true;
+    })
     .catch(function() { document.getElementById('wifi-list').innerHTML = '<p style="color:#f85149">Error loading networks</p>'; });
 }
 
@@ -600,10 +615,14 @@ function addWifi(btn) {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
-      showWifiMsg('ok', 'Network "' + ssid + '" saved.');
       document.getElementById('wifi-ssid').value = '';
       document.getElementById('wifi-password').value = '';
-      loadWifi();
+      if (d.connecting) {
+        showWifiMsg('ok', 'Network saved — Pi is leaving setup mode and connecting. Reconnect to your normal WiFi and reload.');
+      } else {
+        showWifiMsg('ok', 'Network "' + ssid + '" saved.');
+        loadWifi();
+      }
     } else {
       showWifiMsg('err', d.error || 'Failed to add network.');
     }

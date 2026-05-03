@@ -10,6 +10,7 @@ from pathlib import Path
 
 import state
 from config import AIRPORT_FILE, validate_config
+from utils import AP_SSID as _AP_SSID
 
 _LOG_FILE = Path(__file__).with_name("metar_led.log")
 
@@ -46,6 +47,8 @@ def get_status_json() -> dict:
         "is_night":        state.is_night,
         "category_colors": {k: _rgb_to_hex(v) for k, v in state.COLOR_MAP.items()},
         "category_colors_dim": {k: _rgb_to_hex(v) for k, v in state.COLOR_MAP_DIM.items()},
+        "ap_mode":             state.ap_mode,
+        "ap_mode_ssid":        _AP_SSID if state.ap_mode else None,
     }
 
 
@@ -155,9 +158,21 @@ def handle_add_wifi(body: bytes) -> dict:
     if not ssid:
         return {"error": "ssid is required"}
     password = (data.get("password") or "").strip()
-    from utils import wifi_add
+    from utils import wifi_add, wifi_stop_ap
     err = wifi_add(ssid, password)
-    return {"error": err} if err else {"ok": True}
+    if err:
+        return {"error": err}
+    if state.ap_mode:
+        # Stop the AP after the response is sent so the client gets the reply
+        def _stop():
+            import time as _time
+            _time.sleep(0.5)
+            wifi_stop_ap()
+            state.ap_mode = False
+            logger.info("AP mode stopped after new network '%s' saved", ssid)
+        threading.Thread(target=_stop, daemon=True).start()
+        return {"ok": True, "connecting": True}
+    return {"ok": True}
 
 
 def handle_delete_wifi(body: bytes) -> dict:

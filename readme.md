@@ -79,14 +79,19 @@ For full GPIO pin details, refer to [pinout.xyz](https://pinout.xyz/).
 > sudo su
 > ```
 
-### 1. Prepare Raspberry Pi  
+### 1. Prepare Raspberry Pi
+
+> **Minimum OS:** Raspberry Pi OS **Bookworm** (Debian 12, released October 2023). This is the first release where NetworkManager is the default network manager. The WiFi management and AP hotspot features (`nmcli`) will not work on Bullseye or earlier without manually replacing dhcpcd with NetworkManager.
+
 Ensure the Pi is connected to Wi-Fi. `nmcli` is recommended for easier setup (see [tutorial](https://www.jeffgeerling.com/blog/2023/nmcli-wifi-on-raspberry-pi-os-12-bookworm/)).
 
 Install required packages:
 ```bash
 sudo apt update
-sudo apt install git python3-pip libjpeg-dev zlib1g-dev libfreetype6-dev
+sudo apt install git python3-pip libjpeg-dev zlib1g-dev libfreetype6-dev dnsmasq
 ```
+
+> **Note:** `dnsmasq` is used by NetworkManager to provide DHCP when the Pi broadcasts a setup Wi-Fi hotspot (AP mode). It is not needed if you configure Wi-Fi manually before first boot.
 
 ### 2. Clone the Repository
 Clone the repository into /root:

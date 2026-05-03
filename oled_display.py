@@ -180,6 +180,18 @@ def update_display_normal(oled, display_data: dict) -> None:
     oled.show()
 
 
+def display_show_ap_mode(oled, ssid: str, ip: str = "10.42.0.1") -> None:
+    """Show AP setup mode on OLED: SSID and IP address to connect to."""
+    image = Image.new("1", (oled.width, oled.height))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
+    draw.text((0, 0),  "WiFi Setup Mode", font=font,     fill=255)
+    draw.text((0, 12), ssid,              font=font_med,  fill=255)
+    draw.text((0, 23), ip + ":8080",      font=font,      fill=255)
+    oled.image(image)
+    oled.show()
+
+
 def cleanup(oled, strip, signum=None, frame=None) -> None:
     """Signal handler: clear LEDs and display, then exit."""
     from led_control import led_clear
