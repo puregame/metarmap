@@ -77,10 +77,11 @@ def parse_wind_speed_direction(
     if wind_speed is None or wind_direction is None:
         return "WIND --/--"
     speed = int(wind_speed)
-    direction = int(wind_direction)
     if speed == 0:
         return "WIND CALM"
-    return f"WIND {direction:03d}/{speed:02d}"
+    if str(wind_direction).upper() == "VRB":
+        return f"WIND VRB/{speed:02d}"
+    return f"WIND {int(wind_direction):03d}/{speed:02d}"
 
 
 def get_wifi_status() -> Tuple[str, Optional[int]]:
