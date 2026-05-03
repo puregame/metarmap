@@ -133,10 +133,15 @@ AP_IP = "10.42.0.1"        # IP NM assigns the Pi in hotspot/shared mode
 
 
 def wifi_start_ap() -> Optional[str]:
-    """Bring up a NetworkManager hotspot AP. Returns error string or None."""
-    # Clean up any stale profile and disconnect the interface so NM can
-    # take it into AP mode cleanly (avoids "IP configuration could not be
-    # reserved" when the interface was previously in infrastructure mode)
+    """Bring up a NetworkManager hotspot AP. Returns error string or None.
+
+    Uses explicit `nmcli connection add` rather than `nmcli device wifi hotspot`
+    because the convenience wrapper is unreliable on Bookworm when dnsmasq-base
+    is installed (full dnsmasq service conflicts with NM's built-in DHCP).
+    Requires: sudo apt remove dnsmasq && sudo apt install dnsmasq-base
+    """
+    # Delete any stale profile and disconnect so NM can take the interface
+    # into AP mode cleanly.
     subprocess.run(
         ["nmcli", "connection", "delete", "Hotspot"],
         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -147,10 +152,26 @@ def wifi_start_ap() -> Optional[str]:
     )
     try:
         subprocess.check_output(
-            ["nmcli", "device", "wifi", "hotspot",
-             "ifname", "wlan0",
-             "ssid", AP_SSID,
-             "password", AP_PASSWORD],
+            [
+                "nmcli", "connection", "add",
+                "type", "wifi",
+                "ifname", "wlan0",
+                "mode", "ap",
+                "con-name", "Hotspot",
+                "ssid", AP_SSID,
+                "wifi.band", "bg",
+                "wifi.channel", "3",
+                "wifi-sec.key-mgmt", "wpa-psk",
+                "wifi-sec.psk", AP_PASSWORD,
+                "ipv4.method", "shared",
+                "ipv4.addresses", f"{AP_IP}/24",
+                "ipv6.method", "disabled",
+                "autoconnect", "false",
+            ],
+            stderr=subprocess.STDOUT,
+        )
+        subprocess.check_output(
+            ["nmcli", "connection", "up", "Hotspot"],
             stderr=subprocess.STDOUT,
         )
         return None
