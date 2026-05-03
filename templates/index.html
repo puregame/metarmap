@@ -131,6 +131,12 @@ tbody tr:hover { background: #161b22; }
             title="Save all settings and the airport list to disk">Save All Config</button>
     <a class="btn btn-refresh" href="/api/config/download" download="config.json"
        title="Download config.json to your device">⬇ Download Config</a>
+    <label class="btn btn-refresh" title="Upload a config.json from your device"
+           style="cursor:pointer">
+      ⬆ Upload Config
+      <input type="file" accept=".json,application/json" style="display:none"
+             onchange="uploadConfig(this)">
+    </label>
   </div>
   <div id="config-msg"></div>
 
@@ -559,6 +565,30 @@ function showMsg(type, text) {
   el.className = 'msg msg-' + type;
   el.textContent = text;
   setTimeout(function() { el.className = ''; el.textContent = ''; }, 5000);
+}
+
+function uploadConfig(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var raw;
+    try { raw = JSON.parse(e.target.result); }
+    catch(_) { showMsg('err', 'Invalid JSON file.'); input.value = ''; return; }
+    fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(raw),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) { showMsg('ok', 'Config uploaded and saved.'); _configLoaded = false; loadConfig(); }
+      else       showMsg('err', d.error || 'Upload failed.');
+    })
+    .catch(function() { showMsg('err', 'Upload failed.'); })
+    .finally(function() { input.value = ''; });
+  };
+  reader.readAsText(file);
 }
 
 /* ── WiFi tab ── */
