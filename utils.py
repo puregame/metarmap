@@ -134,9 +134,15 @@ AP_IP = "10.42.0.1"        # IP NM assigns the Pi in hotspot/shared mode
 
 def wifi_start_ap() -> Optional[str]:
     """Bring up a NetworkManager hotspot AP. Returns error string or None."""
-    # Remove any stale profile before creating a fresh one
+    # Clean up any stale profile and disconnect the interface so NM can
+    # take it into AP mode cleanly (avoids "IP configuration could not be
+    # reserved" when the interface was previously in infrastructure mode)
     subprocess.run(
         ["nmcli", "connection", "delete", "Hotspot"],
+        stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ["nmcli", "device", "disconnect", "wlan0"],
         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
     )
     try:

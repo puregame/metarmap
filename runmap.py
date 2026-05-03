@@ -125,6 +125,7 @@ def _button_callback(channel):
 
 
 def _gpio_cleanup() -> None:
+    global _gpio_available
     if _gpio_available:
         try:
             import RPi.GPIO as _gpio  # type: ignore

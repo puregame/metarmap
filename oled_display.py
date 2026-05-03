@@ -163,9 +163,9 @@ def update_display_normal(oled, display_data: dict) -> None:
         home = display_data.get("home_airport", "")
         top_texts = [
             f"HOME: {home}",
-            display_data.get("home_wind_text", "WIND --/--"),
-            display_data.get("home_ceiling", "CEIL --"),
-            display_data.get("home_visibility", "VIS --"),
+            display_data.get("home_wind_text") or "WIND --/--",
+            display_data.get("home_ceiling")   or "CEIL --",
+            display_data.get("home_visibility") or "VIS --",
         ]
         top_text = top_texts[cycle_index % len(top_texts)]
 
