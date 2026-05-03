@@ -180,6 +180,17 @@ def update_display_normal(oled, display_data: dict) -> None:
     oled.show()
 
 
+def display_show_connecting(oled, remaining: int) -> None:
+    """Show WiFi connecting countdown on OLED."""
+    image = Image.new("1", (oled.width, oled.height))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
+    draw.text((0, 0),  "WiFi Connecting", font=font,     fill=255)
+    draw.text((0, 14), f"{remaining}s...", font=font_med, fill=255)
+    oled.image(image)
+    oled.show()
+
+
 def display_show_ap_mode(oled, ssid: str, ip: str = "10.42.0.1") -> None:
     """Show AP setup mode on OLED: SSID and IP address to connect to."""
     image = Image.new("1", (oled.width, oled.height))

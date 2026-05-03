@@ -49,6 +49,7 @@ from led_control import category_to_color, led_clear, led_set_all, led_update
 from oled_display import (
     cleanup,
     display_show_ap_mode,
+    display_show_connecting,
     display_show_status,
     get_is_night,
     update_display_normal,
@@ -277,9 +278,7 @@ def _wait_for_wifi_or_ap(oled) -> None:
                 state.ap_mode = True
                 logger.info("AP mode active — join '%s' and browse to %s:8080", AP_SSID, AP_IP)
             return
-        oled.fill(0)
-        oled.text(f"WiFi... {remaining}s", 0, 0, 1)
-        oled.show()
+        display_show_connecting(oled, remaining)
         time.sleep(10)
 
 

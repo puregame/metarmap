@@ -124,9 +124,6 @@ def get_hostname() -> str:
 def wait_for_wifi(oled) -> None:
     while not is_wifi_connected():
         print("Waiting for WiFi...")
-        oled.fill(0)
-        oled.text("WiFi Connecting", 0, 0, 1)
-        oled.show()
         time.sleep(10)
 
 
