@@ -594,7 +594,7 @@ function renderWifiList(networks) {
       + '<td style="padding:7px 14px;font-family:monospace">' + escHtml(n.name) + '</td>'
       + '<td style="padding:7px 14px">' + badge + '</td>'
       + '<td style="padding:7px 14px"><button class="btn btn-danger" style="font-size:0.82em;padding:4px 10px" '
-      +   'onclick="deleteWifi(' + JSON.stringify(n.name) + ',this)">Delete</button></td>'
+      +   'data-name="' + escHtml(n.name) + '" onclick="deleteWifi(this.dataset.name,this)">Delete</button></td>'
       + '</tr>';
   });
   html += '</tbody></table>';

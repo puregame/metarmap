@@ -161,7 +161,9 @@ def handle_add_wifi(body: bytes) -> dict:
     from utils import wifi_add, wifi_stop_ap
     err = wifi_add(ssid, password)
     if err:
+        logger.warning("WiFi add failed for '%s': %s", ssid, err)
         return {"error": err}
+    logger.info("WiFi network '%s' saved via web UI", ssid)
     if state.ap_mode:
         # Stop the AP after the response is sent so the client gets the reply
         def _stop():
@@ -185,7 +187,11 @@ def handle_delete_wifi(body: bytes) -> dict:
         return {"error": "name is required"}
     from utils import wifi_delete
     err = wifi_delete(name)
-    return {"error": err} if err else {"ok": True}
+    if err:
+        logger.warning("WiFi delete failed for '%s': %s", name, err)
+        return {"error": err}
+    logger.info("WiFi network '%s' deleted via web UI", name)
+    return {"ok": True}
 
 
 def handle_get_logs(lines: int = 100) -> dict:
