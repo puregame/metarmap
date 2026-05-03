@@ -191,14 +191,24 @@ def display_show_connecting(oled, remaining: int) -> None:
     oled.show()
 
 
-def display_show_ap_mode(oled, ssid: str, ip: str = "10.42.0.1") -> None:
-    """Show AP setup mode on OLED: SSID and IP address to connect to."""
+def display_show_ap_mode(oled, ssid: str, password: str, ip: str = "10.42.0.1") -> None:
+    """Show AP setup mode on OLED, cycling through SSID, password, and web URL."""
+    page = int(time.time()) // 4 % 3
+
     image = Image.new("1", (oled.width, oled.height))
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 0, oled.width, oled.height), outline=0, fill=0)
-    draw.text((0, 0),  "WiFi Setup Mode", font=font,     fill=255)
-    draw.text((0, 12), ssid,              font=font_med,  fill=255)
-    draw.text((0, 23), ip + ":8080",      font=font,      fill=255)
+
+    if page == 0:
+        draw.text((0, 0),  "AP: WiFi Setup",  font=font_large, fill=255)
+        draw.text((0, 18), ssid,               font=font,       fill=255)
+    elif page == 1:
+        draw.text((0, 0),  "PW:",              font=font_large, fill=255)
+        draw.text((0, 18), password,           font=font,       fill=255)
+    else:
+        draw.text((0, 0),  "Web:",             font=font_large, fill=255)
+        draw.text((0, 18), f"{ip}:8080",       font=font,       fill=255)
+
     oled.image(image)
     oled.show()
 

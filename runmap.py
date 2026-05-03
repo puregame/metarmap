@@ -35,6 +35,7 @@ from hardware import HARDWARE_AVAILABLE, Color, PixelStrip
 from config import load_config
 from utils import (
     AP_IP,
+    AP_PASSWORD,
     AP_SSID,
     get_ceiling_text,
     get_hostname,
@@ -181,6 +182,7 @@ def main() -> None:
     state.status_display["timezone"] = tz_str
     show_status = False
     last_metar_fetch = 0.0
+    _last_logged_ip = None
 
     try:
         while True:
@@ -190,7 +192,12 @@ def main() -> None:
             # ── Display update (every 1 second) ────────────────────────────
             state.status_display["time"] = display_now
             state.status_display["cycle_time"] = now
-            state.status_display["ip_address"], state.status_display["rssi"] = get_wifi_status()
+            ip, rssi = get_wifi_status()
+            state.status_display["ip_address"] = ip
+            state.status_display["rssi"] = rssi
+            if ip != _last_logged_ip:
+                logger.info("WiFi status: ip=%s rssi=%s", ip, rssi)
+                _last_logged_ip = ip
 
             # Check button: if held, toggle screen and wait for release
             if _gpio_available:
@@ -206,7 +213,7 @@ def main() -> None:
                     pass
 
             if state.ap_mode:
-                display_show_ap_mode(oled, AP_SSID, AP_IP)
+                display_show_ap_mode(oled, AP_SSID, AP_PASSWORD, AP_IP)
             elif show_status:
                 display_show_status(oled, state.status_display)
             else:
