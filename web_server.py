@@ -321,6 +321,18 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_json(get_status_json())
         elif self.path == "/api/config":
             self.send_json(handle_get_config())
+        elif self.path == "/api/config/download":
+            try:
+                raw = AIRPORT_FILE.read_bytes()
+            except Exception:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", 'attachment; filename="config.json"')
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
         elif self.path == "/api/debug":
             self.send_json(handle_get_debug())
         elif self.path.startswith("/api/logs"):

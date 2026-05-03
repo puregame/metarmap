@@ -129,6 +129,8 @@ tbody tr:hover { background: #161b22; }
             title="Turn off every LED on the strip immediately">Clear LEDs</button>
     <button class="btn btn-save"   onclick="saveConfig(this)"
             title="Save all settings and the airport list to disk">Save All Config</button>
+    <a class="btn btn-refresh" href="/api/config/download" download="config.json"
+       title="Download config.json to your device">⬇ Download Config</a>
   </div>
   <div id="config-msg"></div>
 
