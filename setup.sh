@@ -65,5 +65,5 @@ systemctl start metarmap.service
 systemctl status metarmap.service --no-pager
 
 echo ""
-echo "Open your browser to: http://$(hostname -I | awk '{print $1}'):8080"
-echo "Or use:               http://$(hostname).local:8080"
+echo "Open your browser to: http://$(hostname -I | awk '{print $1}'):80"
+echo "Or use:               http://$(hostname).local:80"

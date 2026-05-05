@@ -382,7 +382,7 @@ class WebHandler(BaseHTTPRequestHandler):
         pass
 
 
-def start_web_server(port: int = 8080) -> HTTPServer:
+def start_web_server(port: int = 80) -> HTTPServer:
     server = HTTPServer(("0.0.0.0", port), WebHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

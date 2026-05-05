@@ -207,7 +207,7 @@ def display_show_ap_mode(oled, ssid: str, password: str, ip: str = "10.42.0.1") 
         draw.text((0, 18), password,           font=font,       fill=255)
     else:
         draw.text((0, 0),  "Web:",             font=font_large, fill=255)
-        draw.text((0, 18), f"{ip}:8080",       font=font,       fill=255)
+        draw.text((0, 18), ip,                 font=font,       fill=255)
 
     oled.image(image)
     oled.show()

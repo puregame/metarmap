@@ -10,7 +10,7 @@ Run examples
     # Laptop / dry-run simulation
     python3 runmap.py --dry-run
 
-    # With web UI (http://<pi-ip>:8080)
+    # With web UI (http://<pi-ip>:80)
     python3 runmap.py --web
 """
 
@@ -62,7 +62,7 @@ from config import _is_none_code
 parser = argparse.ArgumentParser(description="LED METAR Map")
 parser.add_argument("--dry-run", action="store_true", help="Force simulation mode")
 parser.add_argument("--test_displays", action="store_true", help="Show test colour pattern")
-parser.add_argument("--web", action="store_true", help="Enable web server on port 8080")
+parser.add_argument("--web", action="store_true", help="Enable web server on port 80")
 args = parser.parse_args()
 
 SIMULATION = args.dry_run or not HARDWARE_AVAILABLE
@@ -172,7 +172,7 @@ def main() -> None:
     logger.info("Monitoring: %s", ", ".join(airports))
 
     if args.web:
-        start_web_server(8080)
+        start_web_server(80)
 
     _wait_for_wifi_or_ap(oled)
     home_location = home_airport_get_sun(home)
@@ -284,7 +284,7 @@ def _wait_for_wifi_or_ap(oled) -> None:
                 logger.error("AP start failed: %s", err)
             else:
                 state.ap_mode = True
-                logger.info("AP mode active — join '%s' and browse to %s:8080", AP_SSID, AP_IP)
+                logger.info("AP mode active — join '%s' and browse to %s:80", AP_SSID, AP_IP)
             return
         display_show_connecting(oled, remaining)
         time.sleep(10)

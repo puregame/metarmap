@@ -473,7 +473,7 @@ class TestWebServerStart(unittest.TestCase):
     @patch("web_server.threading.Thread")
     def test_creates_daemon_thread(self, mock_thread_cls, mock_server_cls):
         mock_server_cls.return_value = MagicMock()
-        start_web_server(8080)
+        start_web_server(80)
         self.assertTrue(mock_thread_cls.call_args[1].get("daemon", False))
 
     @patch("web_server.HTTPServer")
@@ -481,7 +481,7 @@ class TestWebServerStart(unittest.TestCase):
     def test_returns_server(self, _thread, mock_server_cls):
         server = MagicMock()
         mock_server_cls.return_value = server
-        self.assertIs(start_web_server(8080), server)
+        self.assertIs(start_web_server(80), server)
 
 
 # ── NONE code handling (integration) ─────────────────────────────────────────

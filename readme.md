@@ -62,8 +62,7 @@ bash metarmap/setup.sh
 Once the setup script completes, the MetarMap service starts automatically. Open a browser and navigate to:
 
 ```
-http://<your-pi-ip>:8080
-```
+http://<your-pi-ip>```
 
 Use the **Config** tab to assign an airport code to each LED. Click **Flash** to identify which physical LED each row corresponds to, enter the airport ICAO code, then click **Save All Config**.
 
