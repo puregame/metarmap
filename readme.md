@@ -56,7 +56,6 @@ bash metarmap/setup.sh
 
 > **Note:** `setup.sh` installs all dependencies, configures the Python environment, enables I2C, and sets up the systemd service to run automatically on boot.
 
-<!-- TODO: Add screenshot of setup script running in terminal -->
 
 ### 6. Open the web interface and configure your LEDs
 
@@ -68,7 +67,8 @@ http://<your-pi-ip>:8080
 
 Use the **Config** tab to assign an airport code to each LED. Click **Flash** to identify which physical LED each row corresponds to, enter the airport ICAO code, then click **Save All Config**.
 
-<!-- TODO: Add screenshot of web UI Config tab -->
+
+<img src="images/web-interface-config.png" alt="Metar Map" width="400"/>
 
 ### 7. Profit
 
@@ -81,8 +81,8 @@ Your map should now be live. LEDs will update with real-time METAR flight condit
 ## How to Build Your Own
 
 1. **Print the Map** – Choose and print a map of the area you want to display.
-2. **Mark and Punch Airports** – Use a hole punch or similar tool to mark each airport you wish to light up.
-3. **Install LEDs** – Wire a WS2812 LED to each airport hole, keeping track of the LED order (important for configuration).
+2. **Mark and Punch Airports** – Use a hole punch or similar tool to mark each airport you wish to light up. (Tip: a Japanese Screw Punch works wonders, just make sure to have a hard backing!)
+3. **Install LEDs** – Wire a WS2812 LED to each airport hole.
 4. **Prepare Software** – Follow the Quick Start instructions above.
 5. **Connect Hardware** – Wire the LEDs and optional display to a Raspberry Pi.
 6. **Test Airport Order** – Use the web UI's Config tab to map each LED to an airport.
@@ -98,7 +98,7 @@ Note: See [images/](images/) directory for pictures of the assembly.
 - Large printed map
 - Foam board for backing
 - Picture frame (sized to match the foam board)
-- **Raspberry Pi** (with Wi-Fi; e.g., Raspberry Pi Zero W)
+- **Raspberry Pi** (with Wi-Fi; e.g., Raspberry Pi Zero W) with SD Card
 - **WS2812 (Neopixel-style) LED string**  
   - [Option 1](https://www.aliexpress.com/item/4000834629132.html)  
   - [Option 2](https://www.aliexpress.com/item/1005005594083059.html)
@@ -114,10 +114,9 @@ Note: See [images/](images/) directory for pictures of the assembly.
 
 The diagram below shows the complete wiring from the Raspberry Pi GPIO header to the OLED display and LED strip.
 
-| | |
+| MetarMap Wiring Diagram | RPi 40-pin GPIO Pinout |
 |---|---|
 | ![Wiring Diagram](images/wiring.wv.svg) | ![RPi Pinout](images/rpi-gpio.png) |
-| MetarMap Wiring Diagram | RPi 40-pin GPIO Pinout |
 
 For full GPIO pin details, refer to [pinout.xyz](https://pinout.xyz/).
 
