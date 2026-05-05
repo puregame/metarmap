@@ -63,6 +63,9 @@ def get_visibility_text(vis_statute_miles: Optional[float]) -> str:
     """Return visibility as a display-friendly string."""
     if vis_statute_miles is None:
         return "VIS --"
+    if isinstance(vis_statute_miles, str):
+        # API returns "10+" for >= 10 SM; strip non-numeric suffix before converting
+        vis_statute_miles = float(vis_statute_miles.rstrip("+"))
     if vis_statute_miles >= 10:
         return "VIS 10+"
     if vis_statute_miles < 1:
