@@ -82,7 +82,7 @@ BUTTON_PIN = 23
 LOG_FILE = Path(__file__).with_name("metar_led.log")
 UPDATE_INTERVAL = 60    # seconds between METAR refreshes
 DISPLAY_INTERVAL = 1    # seconds between OLED display updates
-AP_FALLBACK_SECS = 180  # wait this long for WiFi before starting AP
+AP_FALLBACK_SECS = 30   # wait this long for WiFi before starting AP
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logger = logging.getLogger("metar_led")

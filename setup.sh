@@ -23,6 +23,7 @@ apt-get install -y -qq \
     libjpeg-dev \
     zlib1g-dev \
     libfreetype6-dev \
+    libopenjp2-7 \
     dnsmasq \
     i2c-tools
 

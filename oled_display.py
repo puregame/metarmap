@@ -155,10 +155,11 @@ def update_display_normal(oled, display_data: dict) -> None:
     now_text = now_local.strftime("%H:%M") if now_local else "N/A"
 
     cycle_time = display_data.get("cycle_time", 0)
-    cycle_index = int(cycle_time) // 5 % 4 if cycle_time else 0
+    cycle_index = int(cycle_time) // 5 if cycle_time else 0
 
     if display_data.get("other_text"):
         top_text = display_data["other_text"]
+        top_font = font_large
     else:
         home = display_data.get("home_airport", "")
         top_texts = [
@@ -166,10 +167,13 @@ def update_display_normal(oled, display_data: dict) -> None:
             display_data.get("home_wind_text") or "WIND --/--",
             display_data.get("home_ceiling")   or "CEIL --",
             display_data.get("home_visibility") or "VIS --",
+            display_data.get("ip_address") or "No IP",
+            display_data.get("hostname") or "",
         ]
         top_text = top_texts[cycle_index % len(top_texts)]
+        top_font = font_large if len(top_text) <= 10 else font_big
 
-    draw.text((0, 0), top_text, font=font_large, fill=255)
+    draw.text((0, 0), top_text, font=top_font, fill=255)
 
     bbox_now = draw.textbbox((0, 0), now_text, font=font_big)
     now_width = bbox_now[2] - bbox_now[0]
