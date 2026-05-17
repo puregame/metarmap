@@ -10,6 +10,7 @@ from pathlib import Path
 
 import state
 from config import AIRPORT_FILE, validate_config
+from utils import AP_SSID as _AP_SSID
 
 _LOG_FILE = Path(__file__).with_name("metar_led.log")
 
@@ -46,6 +47,8 @@ def get_status_json() -> dict:
         "is_night":        state.is_night,
         "category_colors": {k: _rgb_to_hex(v) for k, v in state.COLOR_MAP.items()},
         "category_colors_dim": {k: _rgb_to_hex(v) for k, v in state.COLOR_MAP_DIM.items()},
+        "ap_mode":             state.ap_mode,
+        "ap_mode_ssid":        _AP_SSID if state.ap_mode else None,
     }
 
 
@@ -155,9 +158,23 @@ def handle_add_wifi(body: bytes) -> dict:
     if not ssid:
         return {"error": "ssid is required"}
     password = (data.get("password") or "").strip()
-    from utils import wifi_add
+    from utils import wifi_add, wifi_stop_ap
     err = wifi_add(ssid, password)
-    return {"error": err} if err else {"ok": True}
+    if err:
+        logger.warning("WiFi add failed for '%s': %s", ssid, err)
+        return {"error": err}
+    logger.info("WiFi network '%s' saved via web UI", ssid)
+    if state.ap_mode:
+        # Stop the AP after the response is sent so the client gets the reply
+        def _stop():
+            import time as _time
+            _time.sleep(0.5)
+            wifi_stop_ap()
+            state.ap_mode = False
+            logger.info("AP mode stopped after new network '%s' saved", ssid)
+        threading.Thread(target=_stop, daemon=True).start()
+        return {"ok": True, "connecting": True}
+    return {"ok": True}
 
 
 def handle_delete_wifi(body: bytes) -> dict:
@@ -170,7 +187,11 @@ def handle_delete_wifi(body: bytes) -> dict:
         return {"error": "name is required"}
     from utils import wifi_delete
     err = wifi_delete(name)
-    return {"error": err} if err else {"ok": True}
+    if err:
+        logger.warning("WiFi delete failed for '%s': %s", name, err)
+        return {"error": err}
+    logger.info("WiFi network '%s' deleted via web UI", name)
+    return {"ok": True}
 
 
 def handle_get_logs(lines: int = 100) -> dict:
@@ -300,6 +321,18 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_json(get_status_json())
         elif self.path == "/api/config":
             self.send_json(handle_get_config())
+        elif self.path == "/api/config/download":
+            try:
+                raw = AIRPORT_FILE.read_bytes()
+            except Exception:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", 'attachment; filename="config.json"')
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
         elif self.path == "/api/debug":
             self.send_json(handle_get_debug())
         elif self.path.startswith("/api/logs"):
@@ -349,7 +382,7 @@ class WebHandler(BaseHTTPRequestHandler):
         pass
 
 
-def start_web_server(port: int = 8080) -> HTTPServer:
+def start_web_server(port: int = 80) -> HTTPServer:
     server = HTTPServer(("0.0.0.0", port), WebHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

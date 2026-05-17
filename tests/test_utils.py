@@ -86,6 +86,9 @@ class TestGetVisibilityText(unittest.TestCase):
     def test_ten_plus(self):
         self.assertEqual(get_visibility_text(10), "VIS 10+")
 
+    def test_ten_plus_string(self):
+        self.assertEqual(get_visibility_text("10+"), "VIS 10+")
+
     def test_above_ten(self):
         self.assertEqual(get_visibility_text(15), "VIS 10+")
 

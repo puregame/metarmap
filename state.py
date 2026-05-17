@@ -12,6 +12,7 @@ home_location: Any = None  # astral LocationInfo, set by main() for sun calculat
 categories: Dict[str, str] = {}  # airport -> VFR/MVFR/IFR/LIFR/UNK
 is_night: bool = False
 refresh_event: threading.Event = threading.Event()
+ap_mode: bool = False          # True while Pi is broadcasting a setup AP
 
 # Colors as (R, G, B) tuples; converted to Color objects by led_control
 COLOR_MAP: Dict[str, Tuple[int, int, int]] = {

@@ -63,6 +63,9 @@ def get_visibility_text(vis_statute_miles: Optional[float]) -> str:
     """Return visibility as a display-friendly string."""
     if vis_statute_miles is None:
         return "VIS --"
+    if isinstance(vis_statute_miles, str):
+        # API returns "10+" for >= 10 SM; strip non-numeric suffix before converting
+        vis_statute_miles = float(vis_statute_miles.rstrip("+"))
     if vis_statute_miles >= 10:
         return "VIS 10+"
     if vis_statute_miles < 1:
@@ -77,10 +80,11 @@ def parse_wind_speed_direction(
     if wind_speed is None or wind_direction is None:
         return "WIND --/--"
     speed = int(wind_speed)
-    direction = int(wind_direction)
     if speed == 0:
         return "WIND CALM"
-    return f"WIND {direction:03d}/{speed:02d}"
+    if str(wind_direction).upper() == "VRB":
+        return f"WIND VRB/{speed:02d}"
+    return f"WIND {int(wind_direction):03d}/{speed:02d}"
 
 
 def get_wifi_status() -> Tuple[str, Optional[int]]:
@@ -124,10 +128,75 @@ def get_hostname() -> str:
 def wait_for_wifi(oled) -> None:
     while not is_wifi_connected():
         print("Waiting for WiFi...")
-        oled.fill(0)
-        oled.text("WiFi Connecting", 0, 0, 1)
-        oled.show()
         time.sleep(10)
+
+
+AP_SSID = "MetarMap-Setup"
+AP_PASSWORD = "metarmap1"   # WPA min 8 chars
+AP_IP = "10.42.0.1"        # IP NM assigns the Pi in hotspot/shared mode
+
+
+def wifi_start_ap() -> Optional[str]:
+    """Bring up a NetworkManager hotspot AP. Returns error string or None.
+
+    Uses explicit `nmcli connection add` rather than `nmcli device wifi hotspot`
+    because the convenience wrapper is unreliable on Bookworm when dnsmasq-base
+    is installed (full dnsmasq service conflicts with NM's built-in DHCP).
+    Requires: sudo apt remove dnsmasq && sudo apt install dnsmasq-base
+    """
+    # Delete any stale profile and disconnect so NM can take the interface
+    # into AP mode cleanly.
+    subprocess.run(
+        ["nmcli", "connection", "delete", "Hotspot"],
+        stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ["nmcli", "device", "disconnect", "wlan0"],
+        stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    )
+    try:
+        subprocess.check_output(
+            [
+                "nmcli", "connection", "add",
+                "type", "wifi",
+                "ifname", "wlan0",
+                "mode", "ap",
+                "con-name", "Hotspot",
+                "ssid", AP_SSID,
+                "wifi.band", "bg",
+                "wifi.channel", "3",
+                "wifi-sec.key-mgmt", "wpa-psk",
+                "wifi-sec.psk", AP_PASSWORD,
+                "ipv4.method", "shared",
+                "ipv4.addresses", f"{AP_IP}/24",
+                "ipv6.method", "disabled",
+                "autoconnect", "false",
+            ],
+            stderr=subprocess.STDOUT,
+        )
+        subprocess.check_output(
+            ["nmcli", "connection", "up", "Hotspot"],
+            stderr=subprocess.STDOUT,
+        )
+        return None
+    except subprocess.CalledProcessError as exc:
+        return exc.output.decode().strip()
+    except Exception as exc:
+        return str(exc)
+
+
+def wifi_stop_ap() -> Optional[str]:
+    """Delete the Hotspot profile; NM reconnects to a saved network automatically."""
+    try:
+        subprocess.check_output(
+            ["nmcli", "connection", "delete", "Hotspot"],
+            stderr=subprocess.STDOUT,
+        )
+        return None
+    except subprocess.CalledProcessError as exc:
+        return exc.output.decode().strip()
+    except Exception as exc:
+        return str(exc)
 
 
 def wifi_list_saved() -> list:

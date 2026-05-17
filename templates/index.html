@@ -129,6 +129,14 @@ tbody tr:hover { background: #161b22; }
             title="Turn off every LED on the strip immediately">Clear LEDs</button>
     <button class="btn btn-save"   onclick="saveConfig(this)"
             title="Save all settings and the airport list to disk">Save All Config</button>
+    <a class="btn btn-refresh" href="/api/config/download" download="config.json"
+       title="Download config.json to your device">⬇ Download Config</a>
+    <label class="btn btn-refresh" title="Upload a config.json from your device"
+           style="cursor:pointer">
+      ⬆ Upload Config
+      <input type="file" accept=".json,application/json" style="display:none"
+             onchange="uploadConfig(this)">
+    </label>
   </div>
   <div id="config-msg"></div>
 
@@ -217,6 +225,10 @@ tbody tr:hover { background: #161b22; }
 <div id="tab-wifi" class="tab">
 
   <div id="wifi-msg"></div>
+  <div id="wifi-ap-banner" style="display:none;background:#2a1f00;border:1px solid #d97706;border-radius:5px;color:#fbbf24;font-size:0.9em;margin-bottom:14px;padding:10px 14px">
+    <strong>Setup Mode Active</strong> — The Pi is broadcasting <strong id="wifi-ap-ssid"></strong>.<br>
+    Add your home network below and the Pi will connect automatically.
+  </div>
 
   <!-- Saved networks -->
   <div class="card">
@@ -555,13 +567,48 @@ function showMsg(type, text) {
   setTimeout(function() { el.className = ''; el.textContent = ''; }, 5000);
 }
 
+function uploadConfig(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var raw;
+    try { raw = JSON.parse(e.target.result); }
+    catch(_) { showMsg('err', 'Invalid JSON file.'); input.value = ''; return; }
+    fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(raw),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) { showMsg('ok', 'Config uploaded and saved.'); _configLoaded = false; loadConfig(); }
+      else       showMsg('err', d.error || 'Upload failed.');
+    })
+    .catch(function() { showMsg('err', 'Upload failed.'); })
+    .finally(function() { input.value = ''; });
+  };
+  reader.readAsText(file);
+}
+
 /* ── WiFi tab ── */
 var _wifiLoaded = false;
 
 function loadWifi() {
-  fetch('/api/wifi')
-    .then(function(r) { return r.json(); })
-    .then(function(d) { renderWifiList(d.networks || []); _wifiLoaded = true; })
+  Promise.all([fetch('/api/wifi'), fetch('/api/status')])
+    .then(function(rs) { return Promise.all(rs.map(function(r) { return r.json(); })); })
+    .then(function(ds) {
+      var wifi = ds[0], status = ds[1];
+      var banner = document.getElementById('wifi-ap-banner');
+      if (status.ap_mode) {
+        document.getElementById('wifi-ap-ssid').textContent = status.ap_mode_ssid || 'MetarMap-Setup';
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+      renderWifiList(wifi.networks || []);
+      _wifiLoaded = true;
+    })
     .catch(function() { document.getElementById('wifi-list').innerHTML = '<p style="color:#f85149">Error loading networks</p>'; });
 }
 
@@ -579,7 +626,7 @@ function renderWifiList(networks) {
       + '<td style="padding:7px 14px;font-family:monospace">' + escHtml(n.name) + '</td>'
       + '<td style="padding:7px 14px">' + badge + '</td>'
       + '<td style="padding:7px 14px"><button class="btn btn-danger" style="font-size:0.82em;padding:4px 10px" '
-      +   'onclick="deleteWifi(' + JSON.stringify(n.name) + ',this)">Delete</button></td>'
+      +   'data-name="' + escHtml(n.name) + '" onclick="deleteWifi(this.dataset.name,this)">Delete</button></td>'
       + '</tr>';
   });
   html += '</tbody></table>';
@@ -600,10 +647,14 @@ function addWifi(btn) {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
-      showWifiMsg('ok', 'Network "' + ssid + '" saved.');
       document.getElementById('wifi-ssid').value = '';
       document.getElementById('wifi-password').value = '';
-      loadWifi();
+      if (d.connecting) {
+        showWifiMsg('ok', 'Network saved — Pi is leaving setup mode and connecting. Reconnect to your normal WiFi and reload.');
+      } else {
+        showWifiMsg('ok', 'Network "' + ssid + '" saved.');
+        loadWifi();
+      }
     } else {
       showWifiMsg('err', d.error || 'Failed to add network.');
     }

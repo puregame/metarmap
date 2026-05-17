@@ -9,18 +9,86 @@ A Physical Weather Display Using LEDs
 This project displays real-time METAR data (aviation weather reports) on a physical map using RGB LEDs. Each LED corresponds to an airport and changes color based on current flight conditions. This repository contains the software and instructions to build your own METAR Map.
 
 ---
+
+## Quick Start
+
+### 1. Flash Raspberry Pi OS to your Pi
+
+Download and install [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Flash **Raspberry Pi OS Lite (64-bit, Bookworm)** to your SD card. In the Imager settings, pre-configure your Wi-Fi credentials and enable SSH.
+
+> **Minimum OS:** Raspberry Pi OS **Bookworm** (Debian 12, October 2023 or later). The Wi-Fi AP hotspot feature requires NetworkManager, which became the default in Bookworm. Older releases (Bullseye, etc.) are not supported.
+
+### 2. Boot your Pi and SSH in
+
+Insert the SD card, power on the Pi, and SSH in once it appears on your network:
+
+```bash
+ssh pi@<your-pi-ip>
+```
+
+> **Tip:** If you set a hostname in Raspberry Pi Imager (e.g., `metarmap`), you can use `ssh pi@metarmap.local` instead of finding the IP address. mDNS (`.local`) works out of the box on Mac and most Linux systems; Windows users may need [Bonjour](https://support.apple.com/downloads/bonjour-for-windows) installed.
+
+Switch to root and go to the home directory:
+
+```bash
+sudo su
+cd ~
+```
+
+### 3. Install Git
+
+```bash
+apt update
+apt install -y git
+```
+
+### 4. Clone the repository
+
+```bash
+git clone https://github.com/puregame/metarmap.git
+```
+
+### 5. Run the setup script
+
+```bash
+bash metarmap/setup.sh
+```
+
+> **Note:** `setup.sh` installs all dependencies, configures the Python environment, enables I2C, and sets up the systemd service to run automatically on boot.
+
+
+### 6. Open the web interface and configure your LEDs
+
+Once the setup script completes, the MetarMap service starts automatically. Open a browser and navigate to:
+
+```
+http://<your-pi-ip>```
+
+Use the **Config** tab to assign an airport code to each LED. Click **Flash** to identify which physical LED each row corresponds to, enter the airport ICAO code, then click **Save All Config**.
+
+
+<img src="images/web-interface-config.png" alt="Metar Map" width="400"/>
+
+### 7. Profit
+
+Your map should now be live. LEDs will update with real-time METAR flight conditions automatically.
+
+<!-- TODO: Add photo of completed map on the wall -->
+
+---
+
 ## How to Build Your Own
 
 1. **Print the Map** – Choose and print a map of the area you want to display.
-2. **Mark and Punch Airports** – Use a hole punch or similar tool to mark each airport you wish to light up.
-3. **Install LEDs** – Wire a WS2812 LED to each airport hole, keeping track of the LED order (important for configuration).
-4. **Prepare Software** – Follow the setup instructions below.
+2. **Mark and Punch Airports** – Use a hole punch or similar tool to mark each airport you wish to light up. (Tip: a Japanese Screw Punch works wonders, just make sure to have a hard backing!)
+3. **Install LEDs** – Wire a WS2812 LED to each airport hole.
+4. **Prepare Software** – Follow the Quick Start instructions above.
 5. **Connect Hardware** – Wire the LEDs and optional display to a Raspberry Pi.
-6. **Test Airport Order** – Use the web UI's guided configure feature to map each LED to an airport.
-7. **Adjust Colors & Brightness** – Tune color and brightness as needed.
+6. **Test Airport Order** – Use the web UI's Config tab to map each LED to an airport.
+7. **Adjust Colors & Brightness** – Tune color and brightness via `config.json` as needed.
 8. **Mount and Display** – Install in a frame and mount on the wall.
 
-Note: See images/ directory for pictures of the assembly
+Note: See [images/](images/) directory for pictures of the assembly.
 
 ---
 
@@ -29,7 +97,7 @@ Note: See images/ directory for pictures of the assembly
 - Large printed map
 - Foam board for backing
 - Picture frame (sized to match the foam board)
-- **Raspberry Pi** (with Wi-Fi; e.g., Raspberry Pi Zero W)
+- **Raspberry Pi** (with Wi-Fi; e.g., Raspberry Pi Zero W) with SD Card
 - **WS2812 (Neopixel-style) LED string**  
   - [Option 1](https://www.aliexpress.com/item/4000834629132.html)  
   - [Option 2](https://www.aliexpress.com/item/1005005594083059.html)
@@ -40,14 +108,14 @@ Note: See images/ directory for pictures of the assembly
 - Wires, solder, heat shrink, tools, etc.
 
 ---
+
 ## Hardware Wiring
 
 The diagram below shows the complete wiring from the Raspberry Pi GPIO header to the OLED display and LED strip.
 
-| | |
+| MetarMap Wiring Diagram | RPi 40-pin GPIO Pinout |
 |---|---|
 | ![Wiring Diagram](images/wiring.wv.svg) | ![RPi Pinout](images/rpi-gpio.png) |
-| MetarMap Wiring Diagram | RPi 40-pin GPIO Pinout |
 
 For full GPIO pin details, refer to [pinout.xyz](https://pinout.xyz/).
 
@@ -70,32 +138,37 @@ For full GPIO pin details, refer to [pinout.xyz](https://pinout.xyz/).
 ---
 
 
-## Software Setup
+## Software Setup (Detailed)
 
+> The [Quick Start](#quick-start) above covers the most common path. This section documents each step individually for troubleshooting or manual setup.
 
-> **Note:** This script must be installed and run as the `root` user to access GPIO.  
-> Start by entering:
+> **Note:** The software must be installed and run as the `root` user to access GPIO.  
+> Always start by entering:
 > ```bash
 > sudo su
 > ```
 
-### 1. Prepare Raspberry Pi  
+### 1. Prepare Raspberry Pi
+
 Ensure the Pi is connected to Wi-Fi. `nmcli` is recommended for easier setup (see [tutorial](https://www.jeffgeerling.com/blog/2023/nmcli-wifi-on-raspberry-pi-os-12-bookworm/)).
 
 Install required packages:
 ```bash
-sudo apt update
-sudo apt install git python3-pip libjpeg-dev zlib1g-dev libfreetype6-dev
+apt update
+apt install -y git python3-pip libjpeg-dev zlib1g-dev libfreetype6-dev dnsmasq
 ```
 
+> **Note:** `dnsmasq` is used by NetworkManager to provide DHCP when the Pi broadcasts a setup Wi-Fi hotspot (AP mode). It is not needed if you configure Wi-Fi manually before first boot.
+
 ### 2. Clone the Repository
-Clone the repository into /root:
+
 ```bash
 cd /root
 git clone https://github.com/puregame/metarmap.git
 ```
 
 ### 3. Enable I2C Interface
+
 ```bash
 raspi-config
 ```
@@ -103,12 +176,11 @@ Browse to Interfacing Options > I2C > Enable
 
 Optional: check I2C connection
 ```bash
-sudo apt install -y i2c-tools
+apt install -y i2c-tools
 i2cdetect -y 1
 ```
 
 ### 4. Set Up Python Virtual Environment
-Create and activate a virtual environment:
 
 ```bash
 python3 -m venv venv
@@ -116,7 +188,6 @@ source venv/bin/activate
 ```
 
 ### 5. Install Python Dependencies
-Navigate to the project folder and install required packages:
 
 ```bash
 cd metarmap
@@ -124,54 +195,48 @@ pip install -r requirements.txt
 ```
 
 ### 6. Configure the Systemd Service
-Copy the included service file:
 
 ```bash
 cp metarmap.service /etc/systemd/system/
-
-```
-
-Reload systemd and enable the service:
-```bash
 systemctl daemon-reexec
 systemctl daemon-reload
 systemctl enable metarmap.service
 ```
 
 ### 7. Start and Check the Service
-Start the service and view its status:
 
 ```bash
 systemctl start metarmap.service
 systemctl status metarmap.service
 ```
+
 To stop the service:
 ```bash
 systemctl stop metarmap.service
-
 ```
+
+---
 
 ## Running Manually
-If you prefer to run the script manually (for testing or debugging), make sure to stop the systemd service first:
+
+Stop the systemd service first, then run directly:
+
 ```bash
 systemctl stop metarmap.service
-```
-Then run the script:
-
-```bash
-sudo su
 source /root/venv/bin/activate
 python3 /root/metarmap/runmap.py
-
 ```
 
+---
 
 ## Logging
-- logs are written to metar_led.log
-- The latest METAR data is cached in: `latest_metars.json`
+
+- Logs are written to `metar_led.log`
+- The latest METAR data is cached in `latest_metars.json`
+
+---
 
 ## Updating
-To update the code from the GitHub repository:
 
 ```bash
 sudo su
@@ -182,34 +247,19 @@ git pull
 systemctl start metarmap.service
 ```
 
-NOTE: Ensure you `--assume-unchanged` the config.json file otherwise your settings WILL be overwritten!
-
----
-
-## Wiring Diagram
-
-The wiring diagram is generated from [WireViz](https://github.com/wireviz/WireViz) using the source file `images/wiring.wv.yaml`.
-
-To regenerate the diagram:
-
-```bash
-pip install wireviz
-wireviz images/wiring.wv.yaml
-```
-
-This produces `images/wiring.svg` (vector) and `images/wiring.png` (raster) in the same directory.
+> **Important:** Always run `git update-index --assume-unchanged config.json` before pulling, otherwise your airport configuration will be overwritten.
 
 ---
 
 ## Web Interface
 
-If running manually: start the web server with the `--web` flag. (If running via service, this flag is included automatically)
+The web UI is the primary way to configure and monitor your MetarMap. Open `http://<pi-ip>:8080` in a browser.
+
+If running manually, start the web server with the `--web` flag:
 
 ```bash
 python3 runmap.py --web
 ```
-
-Then open `http://<pi-ip>:8080` in a browser. The web UI is the primary way to configure and monitor your MetarMap.
 
 ### Status Panel
 
@@ -221,9 +271,11 @@ Displays current system information:
 - IP address
 - Total LED count
 
-### LED Cycle Configuration
+### LED Configuration (Config Tab)
 
-Each LED position maps to an airport code. Leave an entry blank (or use `NONE`) to keep that LED off. Changes are saved via the **"Save All Config"** button, which persists the mapping to `config.json`. Each row also has a **Flash** button to identify the physical LED.
+Each LED position maps to an airport ICAO code. Leave an entry blank or use `NONE` to keep that LED off. Click **Flash** to identify the physical LED, enter the airport code, then click **Save All Config** to persist to `config.json`.
+
+<!-- TODO: Add screenshot of web UI Config tab with annotated callouts -->
 
 ### API Endpoints
 
@@ -253,8 +305,8 @@ Each LED position maps to an airport code. Leave an entry blank (or use `NONE`) 
   "led_count": 100,
   "categories": {"CYYZ": "VFR", "CYTZ": "MVFR"},
   "is_night": false,
-  "category_colors": {"VFR": "#008c00", ...},
-  "category_colors_dim": {"VFR": "#002d00", ...}
+  "category_colors": {"VFR": "#008c00"},
+  "category_colors_dim": {"VFR": "#002d00"}
 }
 ```
 
@@ -278,54 +330,67 @@ Each LED position maps to an airport code. Leave an entry blank (or use `NONE`) 
 
 ## Configuration
 
-Configuration is managed via a file called `config.json` in the project folder.  
-The web UI is the recommended way to configure your map — `config.json` is primarily for advanced users or as a backup.
+Configuration is managed via `config.json` in the project folder. The web UI is the recommended way to configure your map — `config.json` is primarily for advanced users or as a backup.
 
 You can use the `serial_number` field to uniquely identify which config file belongs to which physical map.
 
 ### Airports
 
 - The `airports` array must match the physical order of the LEDs — typically closest to farthest from the Pi.
-- If you add more airports, be sure to update the `num_leds` field to reflect the total number.
+- If you add more airports, update the `num_leds` field to match.
 
 ### Color Configuration
 
-- The software provides default color mappings for flight conditions (VFR, MVFR, IFR, etc.).
-- You can override these in the `config.json` file by defining a `colors` and/or `dim_colors` object.
-- Some LEDs (e.g., WS2810) may use GBR instead of RGB format — adjust the color order in the config if needed.
+- Default color mappings are provided for VFR, MVFR, IFR, LIFR, and UNK.
+- Override these in `config.json` with a `colors` and/or `dim_colors` object.
+- Some LEDs (e.g., WS2810) may use GBR instead of RGB — adjust color order in the config if needed.
 
 ### Home Airport
 
-- The `home` field is used to determine local day or night using sunrise/sunset times.
-- When it's night at the home airport, the `dim_colors` are used instead of the default colors to reduce brightness.
+- The `home` field determines local day/night using sunrise/sunset times.
+- At night, `dim_colors` are used instead of `colors` to reduce brightness.
 
 ### Timezone
 
 - The `timezone` field sets the local timezone for the OLED display and web UI.
 - Uses IANA timezone identifiers (e.g., `America/Toronto`, `America/Vancouver`, `Europe/London`).
-- Defaults to UTC if not specified or if the timezone is invalid.
+- Defaults to UTC if not specified or invalid.
 
 ---
 
 ## Debugging
-For optional arguments list
+
+List all optional arguments:
 ```bash
 python3 runmap.py --help
 ```
 
 ### Test LED Intensity and Color Accuracy
-To test brightness and color mapping, run:
 
 ```bash
 python3 runmap.py --test_displays
 ```
-This will light up the 10 closest LEDs in the following order:
 
+This lights up the 10 closest LEDs in this order:
 - High-intensity: VFR, MVFR, IFR, LIFR, UNK
 - Low-intensity: VFR, MVFR, IFR, LIFR, UNK
 
-Use this test to tune brightness and verify correct color configuration.
+Use this to tune brightness and verify correct color configuration.
 
+---
 
-# Future Ideas:
+## Wiring Diagram Source
+
+The wiring diagram is generated from [WireViz](https://github.com/wireviz/WireViz) using `images/wiring.wv.yaml`.
+
+To regenerate:
+
+```bash
+pip install wireviz
+wireviz images/wiring.wv.yaml
+```
+
+---
+
+# Future Ideas
 - Flash LEDs for airports where lightning or TCUs are present
